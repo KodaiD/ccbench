@@ -4,6 +4,10 @@
 *.old
 *.s
 
+.idea
+.vscode
+cmake-build-debug
+cmake-build-release
 
 # Created by https://www.gitignore.io/api/vim,c++,macos
 
