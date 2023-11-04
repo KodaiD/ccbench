@@ -1,4 +1,6 @@
 cmake cmake-curses-gui
+g++
+autoconf
 libboost-filesystem-dev
 libgflags-dev
 libgoogle-glog-dev
