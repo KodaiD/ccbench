@@ -1073,9 +1073,11 @@ RETRY:
 
         switch (query.type) {
           case TxType::IssueJournalVoucher:
+            // dump(tx.thid_, "S2");
             run_issue_journal_voucher(tx, query);
             break;
           case TxType::UpdateMaterialCostMaster:
+            // dump(tx.thid_, "S1");
             run_update_material_cost_master(tx, query);
             break;
           case TxType::UpdateProductCostMaster:

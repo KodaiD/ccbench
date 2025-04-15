@@ -75,6 +75,14 @@ target_link_libraries(sbomb_cicada.exe
         Threads::Threads
         )
 
+target_link_libraries(sbomb_cicada.exe
+        Boost::filesystem
+        gflags::gflags
+        ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
+        ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
+        Threads::Threads
+        )
+
 if (DEFINED ADD_ANALYSIS)
     add_definitions(-DADD_ANALYSIS=${ADD_ANALYSIS})
 else ()

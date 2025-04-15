@@ -151,7 +151,6 @@ Status TxExecutor::read_internal(Storage s, std::string_view key, Tuple* tuple, 
     tuple->lock_.w_lock();
 
     // sync pages that I read
-    // TODO: should use same merge() function?
     if (!reconnoitering_) {
       tuple->graph_.emplace(this->txid_, TxNode(this->txid_));
     }
@@ -163,9 +162,6 @@ Status TxExecutor::read_internal(Storage s, std::string_view key, Tuple* tuple, 
         tuple->graph_.at(this->txid_).from_.emplace(id);
     }
 #endif
-
-    // FIXME: cannot be enabled due to ReadReport03 & ReadReportAbort01
-    // gc(tuple->graph_, this->reclamation_epoch_);
 
 #ifndef NAIVE_VERSION_SELECTION
     stat = get_visible_version(tuple, &ver);
@@ -504,6 +500,7 @@ void TxExecutor::validation_worker(size_t worker_id,
 
         // merge graph
         merge(tuple->graph_, graph);
+        // gc(tuple->graph_, this->reclamation_epoch_);
 
         if (has_cycle(tuple->graph_, this->txid_)) {
             clean_up_node_edges(tuple->graph_, this->txid_);
@@ -531,6 +528,9 @@ void TxExecutor::validation_worker(size_t worker_id,
 
         graph.clear();
         graph.insert(tuple->graph_.begin(), tuple->graph_.end());
+
+        // std::cout << "[" << this->txid_ << ":" << worker_id << "] "
+        //           << "Per-page validation done for " << key << std::endl;
 
         tuple->lock_.w_unlock();
 
@@ -592,7 +592,7 @@ bool TxExecutor::validation() {
     }
 
     // insert-only optimization
-    if (!has_write_ && has_insert_ && thid_ != 0) {
+    if (!has_write_ && has_insert_) {
       for (auto& we : this->write_set_) {
         if (!insert_validation(we))
           goto ABORT_VALIDATION;

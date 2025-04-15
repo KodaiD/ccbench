@@ -101,7 +101,6 @@ int main(int argc, char *argv[]) try {
     OzeResult[0].addLocalAllResult(OzeResult[i]);
   }
   ShowOptParameters();
-  std::cout << "actual_extime:\t" << actual_extime << std::endl;
   OzeResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime, TotalThreadNum);
 
   return 0;

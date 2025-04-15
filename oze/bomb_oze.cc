@@ -112,7 +112,6 @@ int main(int argc, char *argv[]) try {
     OzeResult[0].addLocalPerTxResult(OzeResult[i], TxTypes);
   }
   ShowOptParameters();
-  std::cout << "actual_extime:\t" << actual_extime << std::endl;
   OzeResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime, TotalThreadNum);
   std::cout << "Details per transaction type:" << std::endl;
   OzeResult[0].displayPerTxResult(TxTypes);
