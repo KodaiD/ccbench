@@ -60,6 +60,8 @@ public:
     bool is_ronly_ = false;
     bool is_batch_ = false;
 
+    uint64_t abort_cnt = 0;
+    bool is_pcc_ = false;
     bool is_super_ = false;
     std::vector<uint64_t>& privileges_;
 

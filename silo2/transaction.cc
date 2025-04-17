@@ -24,10 +24,6 @@ void TxExecutor::gc_records() {
 }
 
 void TxExecutor::abort() {
-    if (is_super_) {
-        unlockWriteSet();
-        unlockReadSet();
-    }
     for (auto& we : write_set_) {
         if (we.op_ == OpType::INSERT) {
             Masstrees[get_storage(we.storage_)].remove_value(we.key_);
@@ -38,6 +34,7 @@ void TxExecutor::abort() {
     read_set_.clear();
     write_set_.clear();
     node_map_.clear();
+    abort_cnt++;
 #if BACK_OFF
     Backoff::backoff(FLAGS_clocks_per_us);
 #endif
@@ -49,6 +46,7 @@ void TxExecutor::begin() {
     max_rset_.obj_ = 0;
     if (has_privilege()) {
         is_super_ = true;
+        if (abort_cnt > 0) is_pcc_ = true;
     } else {
         is_super_ = false;
     }
@@ -74,7 +72,7 @@ Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
 
 Status TxExecutor::read_internal(Storage s, std::string_view key,
                                  Tuple* tuple) {
-    if (is_super_) {
+    if (is_pcc_) {
         Tidword tid_word = get_lock(tuple, LockType::SH_LOCKED);
         if (tid_word.absent) { return Status::WARN_NOT_FOUND; }
         auto body = TupleBody(key, tuple->body_.get_val(),
@@ -107,13 +105,13 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
     Tuple* tuple;
     if (ReadElement<Tuple>* re = searchReadSet(s, key)) {
         tuple = re->rcdptr_;
-        if (is_super_) upgrade_lock(tuple, re->get_tidword());
+        if (is_pcc_) upgrade_lock(tuple, re->get_tidword());
         write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE);
         return Status::OK;
     }
     tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
-    if (is_super_) {
+    if (is_pcc_) {
         if (const Tidword tid_word = get_lock(tuple, LockType::EX_LOCKED);
             tid_word.absent)
             return Status::WARN_NOT_FOUND;
@@ -128,7 +126,7 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     if (tuple != nullptr) return Status::WARN_ALREADY_EXISTS;
     tuple = new Tuple();
     tuple->init(std::move(body));
-    if (is_super_) tuple->tidword_.lock = LockType::EX_LOCKED;
+    if (is_pcc_) tuple->tidword_.lock = LockType::EX_LOCKED;
     MasstreeWrapper<Tuple>::insert_info_t insert_info{};
     const Status stat =
             Masstrees[get_storage(s)].insert_value(key, tuple, &insert_info);
@@ -161,7 +159,7 @@ Status TxExecutor::delete_record(Storage s, std::string_view key) {
     }
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
-    if (is_super_) {
+    if (is_pcc_) {
         if (const Tidword tid_word = get_lock(tuple, LockType::EX_LOCKED);
             tid_word.absent)
             return Status::WARN_NOT_FOUND;
@@ -183,7 +181,7 @@ void TxExecutor::lockWriteSet() {
         Tidword expected;
         if (itr->op_ == OpType::INSERT) continue;
         expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
-        if (!is_super_) {
+        if (!is_pcc_) {
             itr->rcdptr_->mutex_.lock();
             expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
             if (expected.lock == LockType::SH_LOCKED ||
@@ -254,7 +252,7 @@ Status TxExecutor::scan(const Storage s, std::string_view left_key,
 }
 
 bool TxExecutor::validationPhase() {
-    if (!is_super_) { sort(write_set_.begin(), write_set_.end()); }
+    if (!is_pcc_) { sort(write_set_.begin(), write_set_.end()); }
     lockWriteSet();
     if (this->status_ == TransactionStatus::aborted) return false;
     asm volatile("" ::: "memory");
@@ -263,7 +261,7 @@ bool TxExecutor::validationPhase() {
     for (auto& itr : read_set_) {
         Tidword check;
         check.obj_ = loadAcquire(itr.rcdptr_->tidword_.obj_);
-        if (!is_super_) {
+        if (!is_pcc_) {
             if (itr.get_tidword().epoch != check.epoch ||
                 itr.get_tidword().tid != check.tid) {
                 this->status_ = TransactionStatus::aborted;
@@ -336,6 +334,8 @@ void TxExecutor::writePhase() {
     read_set_.clear();
     write_set_.clear();
     node_map_.clear();
+
+    if (is_super_) hand_over_privilege();
 }
 
 bool TxExecutor::commit() {
