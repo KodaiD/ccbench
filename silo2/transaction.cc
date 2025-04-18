@@ -24,6 +24,10 @@ void TxExecutor::gc_records() {
 }
 
 void TxExecutor::abort() {
+    if (is_pcc_) {
+        unlockReadSet();
+        unlockWriteSet();
+    }
     for (auto& we : write_set_) {
         if (we.op_ == OpType::INSERT) {
             Masstrees[get_storage(we.storage_)].remove_value(we.key_);
@@ -46,11 +50,15 @@ void TxExecutor::begin() {
     max_rset_.obj_ = 0;
     if (has_privilege()) {
         is_super_ = true;
-        if (abort_cnt > 0) is_pcc_ = true;
+        if (abort_cnt > 0) {
+            is_pcc_ = true;
+        } else {
+            is_pcc_ = false;
+        }
     } else {
         is_super_ = false;
+        is_pcc_ = false;
     }
-    assert(!is_super_);
 }
 
 Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
@@ -74,7 +82,12 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
                                  Tuple* tuple) {
     if (is_pcc_) {
         Tidword tid_word = get_lock(tuple, LockType::SH_LOCKED);
-        if (tid_word.absent) { return Status::WARN_NOT_FOUND; }
+        if (tid_word.absent) {
+            Tidword desired = tid_word;
+            desired.lock = LockType::UNLOCKED;
+            storeRelease(tuple->tidword_.obj_, desired.obj_);
+            return Status::WARN_NOT_FOUND;
+        }
         auto body = TupleBody(key, tuple->body_.get_val(),
                               tuple->body_.get_val_align());
         read_set_.emplace_back(s, key, tuple, std::move(body), tid_word);
@@ -113,8 +126,12 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
     if (is_pcc_) {
         if (const Tidword tid_word = get_lock(tuple, LockType::EX_LOCKED);
-            tid_word.absent)
+            tid_word.absent) {
+            Tidword desired = tid_word;
+            desired.lock = LockType::UNLOCKED;
+            storeRelease(tuple->tidword_.obj_, desired.obj_);
             return Status::WARN_NOT_FOUND;
+        }
     }
     write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE);
     return Status::OK;
@@ -161,8 +178,12 @@ Status TxExecutor::delete_record(Storage s, std::string_view key) {
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
     if (is_pcc_) {
         if (const Tidword tid_word = get_lock(tuple, LockType::EX_LOCKED);
-            tid_word.absent)
+            tid_word.absent) {
+            Tidword desired = tid_word;
+            desired.lock = LockType::UNLOCKED;
+            storeRelease(tuple->tidword_.obj_, desired.obj_);
             return Status::WARN_NOT_FOUND;
+        }
         write_set_.emplace_back(s, key, tuple, OpType::DELETE);
         return Status::OK;
     }
@@ -193,7 +214,7 @@ void TxExecutor::lockWriteSet() {
             }
             while (expected.lock == LockType::LATCHED)
                 expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
-            assert(expected.lock == LockType::UNLOCKED);
+            if (expected.lock != LockType::UNLOCKED) ERR;
             if (itr->op_ == OpType::UPDATE && expected.absent) {
                 itr->rcdptr_->mutex_.unlock();
                 this->status_ = TransactionStatus::aborted;
@@ -252,7 +273,7 @@ Status TxExecutor::scan(const Storage s, std::string_view left_key,
 }
 
 bool TxExecutor::validationPhase() {
-    if (!is_pcc_) { sort(write_set_.begin(), write_set_.end()); }
+    if (!is_pcc_) sort(write_set_.begin(), write_set_.end());
     lockWriteSet();
     if (this->status_ == TransactionStatus::aborted) return false;
     asm volatile("" ::: "memory");
@@ -282,7 +303,7 @@ bool TxExecutor::validationPhase() {
         }
         max_rset_ = std::max(max_rset_, check);
     }
-    unlockReadSet();
+    if (is_pcc_) unlockReadSet();
     for (auto [fst, snd] : node_map_) {
         if (auto node = static_cast<MasstreeWrapper<Tuple>::node_type*>(fst);
             node->full_version_value() != snd) {
@@ -335,6 +356,7 @@ void TxExecutor::writePhase() {
     write_set_.clear();
     node_map_.clear();
 
+    abort_cnt = 0;
     if (is_super_) hand_over_privilege();
 }
 
@@ -364,9 +386,12 @@ WriteElement<Tuple>* TxExecutor::searchWriteSet(Storage s,
 }
 
 void TxExecutor::unlockReadSet() {
+    if (!is_pcc_) ERR;
     for (auto& itr : read_set_) {
         const Tidword expected = itr.get_tidword();
         Tidword desired = expected;
+        if (expected.lock == LockType::UNLOCKED) continue;
+        if (expected.lock != LockType::SH_LOCKED) ERR;
         desired.lock = LockType::UNLOCKED;
         storeRelease(itr.rcdptr_->tidword_.obj_, desired.obj_);
     }
@@ -377,6 +402,8 @@ void TxExecutor::unlockWriteSet() {
         Tidword expected;
         if (itr.op_ == OpType::INSERT) continue;
         expected.obj_ = loadAcquire(itr.rcdptr_->tidword_.obj_);
+        if (expected.lock == LockType::UNLOCKED && is_pcc_) continue;
+        if (expected.lock == LockType::UNLOCKED) ERR;
         Tidword desired = expected;
         desired.lock = LockType::UNLOCKED;
         storeRelease(itr.rcdptr_->tidword_.obj_, desired.obj_);
@@ -389,6 +416,7 @@ void TxExecutor::unlockWriteSet(
         Tidword expected;
         if (itr->op_ == OpType::INSERT) continue;
         expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
+        if (expected.lock == LockType::UNLOCKED) ERR;
         Tidword desired = expected;
         desired.lock = LockType::UNLOCKED;
         storeRelease(itr->rcdptr_->tidword_.obj_, desired.obj_);
@@ -440,7 +468,7 @@ Tidword TxExecutor::get_lock(Tuple* tuple, const LockType lock_type) {
     expected.obj_ = loadAcquire(tuple->tidword_.obj_);
     while (expected.lock == LockType::LATCHED)
         expected.obj_ = loadAcquire(tuple->tidword_.obj_);
-    assert(expected.lock == LockType::UNLOCKED);
+    if (expected.lock != LockType::UNLOCKED) ERR;
     if (expected.absent) {
         tuple->mutex_.unlock();
         return expected;
@@ -453,7 +481,7 @@ Tidword TxExecutor::get_lock(Tuple* tuple, const LockType lock_type) {
 }
 
 Tidword TxExecutor::upgrade_lock(Tuple* tuple, Tidword current) {
-    assert(current.lock == LockType::SH_LOCKED);
+    if (current.lock != LockType::SH_LOCKED) ERR;
     tuple->mutex_.lock();
     Tidword desired = current;
     desired.lock = LockType::EX_LOCKED;
