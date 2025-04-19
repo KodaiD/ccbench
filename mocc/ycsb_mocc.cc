@@ -87,6 +87,7 @@ int main(int argc, char *argv[]) try {
   ShowOptParameters();
   std::cout << "actual_extime:\t" << actual_extime << std::endl;
   MoccResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime, TotalThreadNum);
+  MoccResult[0].displayLatencies("mocc", FLAGS_print_latencies);
 
   return 0;
 } catch (bad_alloc) {

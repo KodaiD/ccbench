@@ -96,6 +96,7 @@ int main(int argc, char *argv[]) try {
   CicadaResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
                                    TotalThreadNum,
                                    FLAGS_max_ope, FLAGS_batch_max_ope);
+  CicadaResult[0].displayLatencies("cicada", FLAGS_print_latencies);
   // TODO: enable this if really necessary
   // deleteDB();
 

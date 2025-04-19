@@ -98,6 +98,7 @@ int main(int argc, char *argv[]) try {
   ErmiaResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
                                   TotalThreadNum,
                                   FLAGS_max_ope, FLAGS_batch_max_ope);
+  ErmiaResult[0].displayLatencies("ermia", FLAGS_print_latencies);
 
   return 0;
 } catch (bad_alloc) {

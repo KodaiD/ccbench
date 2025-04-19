@@ -43,6 +43,8 @@ DEFINE_uint64(tuple_num, 1000000, "Total number of records.");
 DEFINE_bool(ycsb, true,
             "True uses zipf_skew, false uses faster random generator.");
 DEFINE_double(zipf_skew, 0, "zipf skew. 0 ~ 0.999...");
+DEFINE_bool(print_latencies, false,
+            "True means print latencies of transactions.");
 #else
 DECLARE_uint64(clocks_per_us);
 DECLARE_uint64(extime);
@@ -54,6 +56,7 @@ DECLARE_uint64(thread_num);
 DECLARE_uint64(tuple_num);
 DECLARE_bool(ycsb);
 DECLARE_double(zipf_skew);
+DECLARE_bool(print_latencies);
 #endif
 
 GLOBAL uint64_t TotalThreadNum;

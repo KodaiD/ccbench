@@ -50,6 +50,8 @@ DEFINE_bool(forwarding, true, "Enable order forwarding.");
 DEFINE_uint64(validation_threshold, 100, "Threshold of pages for parallel validation.");
 DEFINE_uint64(validation_th_num, 1, "Number of validation threads.");
 DEFINE_uint64(cc_mode, DEFAULT_CC_MODE, "Initial concurrency control mode.");
+DEFINE_bool(print_latencies, false,
+            "True means print latencies of transactions.");
 #else
 DECLARE_uint64(clocks_per_us);
 DECLARE_uint64(extime);
@@ -66,6 +68,7 @@ DECLARE_bool(forwarding);
 DECLARE_uint64(validation_threshold);
 DECLARE_uint64(validation_th_num);
 DECLARE_uint64(cc_mode);
+DECLARE_bool(print_latencies);
 #endif
 
 GLOBAL uint64_t TotalThreadNum;

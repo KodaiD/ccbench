@@ -92,6 +92,7 @@ int main(int argc, char *argv[]) try {
   ShowOptParameters();
   TicTocResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime,
                                    FLAGS_thread_num);
+  TicTocResult[0].displayLatencies("tictoc", FLAGS_print_latencies);
 
   return 0;
 } catch (bad_alloc) {

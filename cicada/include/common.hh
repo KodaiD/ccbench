@@ -64,6 +64,8 @@ DEFINE_uint64(batch_max_ope, 1000,
 DEFINE_uint64(batch_rratio, 100, "read ratio of single batch transaction.");
 DEFINE_uint64(batch_tuples, 0, "Number of update-only records for batch transaction.");
 DEFINE_bool(batch_simple_rr, false, "No one touches update-only records of batch transaction.");
+DEFINE_bool(print_latencies, false,
+            "True means print latencies of transactions.");
 #else
 DECLARE_uint64(clocks_per_us);
 DECLARE_uint64(extime);
@@ -89,6 +91,7 @@ DECLARE_uint64(batch_max_ope);
 DECLARE_uint64(batch_rratio);
 DECLARE_uint64(batch_tuples);
 DECLARE_bool(batch_simple_rr);
+DECLARE_bool(print_latencies);
 #endif
 
 GLOBAL uint64_t TotalThreadNum;

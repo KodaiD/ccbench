@@ -6,6 +6,9 @@
 #include "../include/debug.hh"
 #include "../include/result.hh"
 
+#include <algorithm>
+#include <fstream>
+
 using std::cout;
 using std::endl;
 using std::fixed;
@@ -47,6 +50,34 @@ void Result::displayOps(size_t extime, size_t op_num, size_t batch_op_num) {
   uint64_t result = (total_commit_counts_*op_num
                     + total_batch_commit_counts_*batch_op_num) / extime;
   cout << "throughput[ops]:\t" << result << endl;
+}
+
+void Result::displayLatencies(const std::string& protocol,
+                              const bool print_latencies) {
+    std::sort(total_latencies_.begin(), total_latencies_.end());
+    // 50% latency
+    int index = (int)((double)total_latencies_.size() * 0.5);
+    printf("50%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    // 90% latency
+    index = (int)((double)total_latencies_.size() * 0.9);
+    printf("90%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    // 99% latency
+    index = (int)((double)total_latencies_.size() * 0.99);
+    printf("99%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    // 99.9% latency
+    index = (int)((double)total_latencies_.size() * 0.999);
+    printf("99.9%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    // 99.99% latency
+    index = (int)((double)total_latencies_.size() * 0.9999);
+    printf("99.99%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    if (print_latencies) {
+        // print all latency to output file
+        const std::string output_file_name = "latency_" + protocol + ".txt";
+        std::ofstream output_file(output_file_name);
+        for (unsigned int i = 0; i < total_latencies_.size(); ++i) {
+            output_file << total_latencies_[i] * 1000000 << std::endl;
+        }
+    }
 }
 
 #if ADD_ANALYSIS
@@ -421,6 +452,10 @@ void Result::addLocalSuccessForwarding(const uint64_t count) {
   total_success_fw_ += count;
 }
 
+void Result::addLatencies(const std::vector<double>& latencies) {
+  total_latencies_.insert(total_latencies_.end(), latencies.begin(), latencies.end());
+}
+
 #if ADD_ANALYSIS
 void Result::addLocalAbortByOperation(const uint64_t count) {
   total_abort_by_operation_ += count;
@@ -652,6 +687,7 @@ void Result::addLocalAllResult(const Result &other) {
   addLocalCommitCounts(other.local_commit_counts_);
   addLocalBatchCommitCounts(other.local_batch_commit_counts_);
   addLocalSuccessForwarding(other.local_success_fw_);
+  addLatencies(other.local_latencies_);
 #if ADD_ANALYSIS
   addLocalAbortByOperation(other.local_abort_by_operation_);
   addLocalAbortByValidation(other.local_abort_by_validation_);

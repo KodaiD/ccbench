@@ -111,6 +111,8 @@ RETRY:
 
         if (loadAcquire(tx.quit_)) return;
 
+        const uint64_t start_ts = rdtscp();
+
         tx.begin();
         SimpleKey<8> key[tx.pro_set_.size()];
         HeapObject obj[tx.pro_set_.size()];
@@ -162,6 +164,11 @@ RETRY:
         }
         storeRelease(tx.result_->local_commit_counts_,
                      loadAcquire(tx.result_->local_commit_counts_) + 1);
+        const uint64_t end_ts = rdtscp();
+        double latency =
+            (double)(end_ts - start_ts) / (FLAGS_clocks_per_us * powl(10, 6));
+        if (tx.result_->local_latencies_.size() < 1000000)
+            tx.result_->local_latencies_.emplace_back(latency);
 
         return;
     }

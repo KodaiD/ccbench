@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <atomic>
 #include <iomanip>
 #include <iostream>
@@ -19,6 +20,7 @@ public:
   uint64_t local_abort_counts_per_tx_[MAX_TX_TYPE] = {0};
   int64_t local_latency_per_tx_[MAX_TX_TYPE] = {0};
   uint64_t local_success_fw_ = 0;
+  std::vector<double> local_latencies_;
 #if ADD_ANALYSIS
   uint64_t local_abort_by_operation_ = 0;
   uint64_t local_abort_by_validation_ = 0;
@@ -67,6 +69,7 @@ public:
   uint64_t total_abort_counts_per_tx_[MAX_TX_TYPE] = {0};
   uint64_t total_latency_per_tx_[MAX_TX_TYPE] = {0};
   uint64_t total_success_fw_ = 0;
+  std::vector<double> total_latencies_;
 #if ADD_ANALYSIS
   uint64_t total_abort_by_operation_ = 0;
   uint64_t total_abort_by_validation_ = 0;
@@ -109,6 +112,8 @@ public:
   uint64_t total_forwarding2_count_ = 0;
 #endif
 
+  Result() { local_latencies_.reserve(1000000); }
+
   void displayAbortCounts();
 
   void displayAbortRate();
@@ -129,6 +134,8 @@ public:
   void displayPerTxResult(std::map<uint32_t,std::string> tx_types);
 
   void displayOzeAnalysisResult(size_t clocks_per_us, size_t extime, size_t thread_num);
+
+  void displayLatencies(const std::string& protocol, bool print_latencies);
 
 #if ADD_ANALYSIS
   void displayAbortByOperationRate();   // abort by operation rate;
@@ -189,6 +196,8 @@ public:
   void addLocalBatchCommitCounts(const uint64_t count);
 
   void addLocalSuccessForwarding(const uint64_t count);
+
+  void addLatencies(const std::vector<double> &latencies);
 
 #if ADD_ANALYSIS
   void addLocalAbortByOperation(const uint64_t count);

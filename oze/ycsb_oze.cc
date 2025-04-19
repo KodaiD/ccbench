@@ -102,6 +102,7 @@ int main(int argc, char *argv[]) try {
   }
   ShowOptParameters();
   OzeResult[0].displayAllResult(FLAGS_clocks_per_us, FLAGS_extime, TotalThreadNum);
+  OzeResult[0].displayLatencies("oze", FLAGS_print_latencies);
 
   return 0;
 } catch (bad_alloc) {
