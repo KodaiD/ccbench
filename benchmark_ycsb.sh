@@ -14,7 +14,7 @@ dest=$(pwd)/results
 #num_sec=5
 
 # Local
-protocol=("silo" "silo2")
+protocol=("silo" "silo2" "polaris")
 threads=(1 2 4 8)
 read_rates=(0 50 100)
 num_rec=1000000
@@ -26,9 +26,9 @@ for rratio in "${read_rates[@]}"; do
   mkdir -p ${dest}/ycsb-r${rratio}
   for thread in "${threads[@]}"; do
     print_latencies=0
-    if [ $thread -eq 64 ]; then
-      print_latencies=1
-    fi
+#    if [ $thread -eq 64 ]; then
+#      print_latencies=1
+#    fi
 #    CMD="numactl --interleave=all ./${protocol}/${protocol}.exe"
     CMD="./build/${protocol}/ycsb_${protocol}.exe"
     CMD+=" --ycsb-rratio ${rratio}"
