@@ -57,19 +57,19 @@ void Result::displayLatencies(const std::string& protocol,
     std::sort(total_latencies_.begin(), total_latencies_.end());
     // 50% latency
     int index = (int)((double)total_latencies_.size() * 0.5);
-    printf("50%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    printf("p50 latency[us]:\t%lf\n", total_latencies_[index] * 1000000);
     // 90% latency
     index = (int)((double)total_latencies_.size() * 0.9);
-    printf("90%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    printf("p90 latency[us]:\t%lf\n", total_latencies_[index] * 1000000);
     // 99% latency
     index = (int)((double)total_latencies_.size() * 0.99);
-    printf("99%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    printf("p99 latency[us]:\t%lf\n", total_latencies_[index] * 1000000);
     // 99.9% latency
     index = (int)((double)total_latencies_.size() * 0.999);
-    printf("99.9%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    printf("p999 latency[us]:\t%lf\n", total_latencies_[index] * 1000000);
     // 99.99% latency
     index = (int)((double)total_latencies_.size() * 0.9999);
-    printf("99.99%% latency (us): %lf\n", total_latencies_[index] * 1000000);
+    printf("p9999 latency[us]:\t%lf\n", total_latencies_[index] * 1000000);
     if (print_latencies) {
         // print all latency to output file
         const std::string output_file_name = "latency_" + protocol + ".txt";

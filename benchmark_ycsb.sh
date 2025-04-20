@@ -38,7 +38,7 @@ for rratio in "${read_rates[@]}"; do
     CMD+=" --thread-num ${thread}"
     CMD+=" --print-latencies ${print_latencies}"
     echo ${CMD}
-    echo ${CMD} >> ${dest}/ycsb-r${rratio}/${protocol}.log
+    echo Executing: ${CMD} >> ${dest}/ycsb-r${rratio}/${protocol}.log
     ${CMD} >> ${dest}/ycsb-r${rratio}/${protocol}.log || { echo "Error: Command failed - ${CMD}"; exit 1; }
   done
 done
