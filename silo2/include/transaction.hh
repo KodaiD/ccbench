@@ -63,7 +63,6 @@ public:
 
     uint64_t abort_cnt = 0;
     bool is_pcc_ = false;
-    bool is_super_ = false;
     std::vector<uint64_t>& privileges_;
 
     // char write_val_[VAL_SIZE];

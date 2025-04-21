@@ -89,4 +89,10 @@ public:
                 const Tidword tidword, const LockType lock_type)
         : OpElement<T>::OpElement(s, key, rcdptr), tidword_(tidword),
           lock_type_(lock_type) {}
+
+    bool operator<(const LockElement& right) const {
+        if (this->storage_ != right.storage_)
+            return this->storage_ < right.storage_;
+        return this->key_ < right.key_;
+    }
 };
