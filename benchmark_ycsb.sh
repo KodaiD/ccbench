@@ -6,7 +6,7 @@ mkdir -p results && rm -rf results/*
 dest=$(pwd)/results
 
 ## Server
-#protocol=("silo" "silo2")
+#protocol=("silo" "silo2" "polaris")
 #threads=(1 8 16 24 32 40 48 56 64)
 #read_rates=(0 50 100)
 #num_rec=1000000
@@ -29,7 +29,6 @@ for rratio in "${read_rates[@]}"; do
 #    if [ $thread -eq 64 ]; then
 #      print_latencies=1
 #    fi
-#    CMD="numactl --interleave=all ./${protocol}/${protocol}.exe"
     CMD="./build/${protocol}/ycsb_${protocol}.exe"
     CMD+=" --ycsb-rratio ${rratio}"
     CMD+=" --extime ${num_sec}"

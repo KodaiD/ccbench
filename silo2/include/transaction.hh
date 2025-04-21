@@ -33,6 +33,7 @@ class TxExecutor {
 public:
     std::vector<ReadElement<Tuple>> read_set_;
     std::vector<WriteElement<Tuple>> write_set_;
+    std::vector<LockElement<Tuple>> lock_set_;
     std::vector<Procedure> pro_set_;
     std::deque<Tuple*> gc_records_;
     std::unordered_map<void*, uint64_t> node_map_;
@@ -118,29 +119,15 @@ public:
                 std::string_view right_key, bool r_exclusive,
                 std::vector<TupleBody*>& result, int64_t limit);
 
-    /**
-   * @brief Search xxx set
-   * @detail Search element of local set corresponding to given key.
-   * In this prototype system, the value to be updated for each worker thread
-   * is fixed for high performance, so it is only necessary to check the key
-   * match.
-   * @param Key [in] the key of key-value
-   * @return Corresponding element of local set
-   */
+    LockElement<Tuple>* searchLockSet(Storage s, std::string_view key);
+
+    void unlockRead() const;
+
+    void unlockWrite() const;
+
     ReadElement<Tuple>* searchReadSet(Storage s, std::string_view key);
 
-    /**
-   * @brief Search xxx set
-   * @detail Search element of local set corresponding to given key.
-   * In this prototype system, the value to be updated for each worker thread
-   * is fixed for high performance, so it is only necessary to check the key
-   * match.
-   * @param Key [in] the key of key-value
-   * @return Corresponding element of local set
-   */
     WriteElement<Tuple>* searchWriteSet(Storage s, std::string_view key);
-
-    void unlockReadSet();
 
     void unlockWriteSet();
 
