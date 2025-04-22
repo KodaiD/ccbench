@@ -33,7 +33,8 @@ class TxExecutor {
 public:
     std::vector<ReadElement<Tuple>> read_set_;
     std::vector<WriteElement<Tuple>> write_set_;
-    std::vector<LockElement<Tuple>> lock_set_;
+    std::vector<LockElement<Tuple>> read_lock_set_;
+    std::vector<LockElement<Tuple>> write_lock_set_;
     std::vector<Procedure> pro_set_;
     std::deque<Tuple*> gc_records_;
     std::unordered_map<void*, uint64_t> node_map_;
@@ -118,7 +119,7 @@ public:
                 std::string_view right_key, bool r_exclusive,
                 std::vector<TupleBody*>& result, int64_t limit);
 
-    LockElement<Tuple>* searchLockSet(Storage s, std::string_view key);
+    LockElement<Tuple>* searchReadLockSet(Storage s, std::string_view key);
 
     void unlockRead() const;
 

@@ -27,6 +27,7 @@ void TxExecutor::abort() {
     if (is_pcc_) {
         unlockRead();
         unlockWrite();
+        hand_over_privilege();
     }
     for (auto& we : write_set_) {
         if (we.op_ == OpType::INSERT) {
@@ -37,7 +38,8 @@ void TxExecutor::abort() {
     gc_records();
     read_set_.clear();
     write_set_.clear();
-    lock_set_.clear();
+    read_lock_set_.clear();
+    write_lock_set_.clear();
     node_map_.clear();
     abort_cnt++;
 #if BACK_OFF
@@ -86,7 +88,8 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
         auto body = TupleBody(key, tuple->body_.get_val(),
                               tuple->body_.get_val_align());
         read_set_.emplace_back(s, key, tuple, std::move(body), tid_word);
-        lock_set_.emplace_back(s, key, tuple, tid_word, LockType::SH_LOCKED);
+        read_lock_set_.emplace_back(s, key, tuple, tid_word,
+                                    LockType::SH_LOCKED);
         return Status::OK;
     }
     TupleBody body;
@@ -140,7 +143,8 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     }
     write_set_.emplace_back(s, key, tuple, OpType::INSERT);
     if (is_pcc_)
-        lock_set_.emplace_back(s, key, tuple, tid_word, LockType::EX_LOCKED);
+        write_lock_set_.emplace_back(s, key, tuple, tid_word,
+                                     LockType::EX_LOCKED);
     if (insert_info.node) {
         if (!node_map_.empty()) {
             if (const auto it = node_map_.find((void*) insert_info.node);
@@ -174,7 +178,7 @@ void TxExecutor::lockWriteSet() {
         Tidword expected;
         if (itr->op_ == OpType::INSERT) continue;
         if (is_pcc_) {
-            if (const auto le = searchLockSet(itr->storage_, itr->key_);
+            if (const auto le = searchReadLockSet(itr->storage_, itr->key_);
                 le && le->lock_type_ == LockType::SH_LOCKED) {
                 const Tidword tid_word =
                         upgrade_lock(le->rcdptr_, le->tidword_);
@@ -186,8 +190,9 @@ void TxExecutor::lockWriteSet() {
                     this->status_ = TransactionStatus::aborted;
                     return;
                 }
-                lock_set_.emplace_back(itr->storage_, itr->key_, itr->rcdptr_,
-                                       tid_word, LockType::EX_LOCKED);
+                write_lock_set_.emplace_back(itr->storage_, itr->key_,
+                                             itr->rcdptr_, tid_word,
+                                             LockType::EX_LOCKED);
             }
         } else {
             itr->rcdptr_->mutex_.lock();
@@ -261,7 +266,7 @@ Status TxExecutor::scan(const Storage s, std::string_view left_key,
 
 bool TxExecutor::validationPhase() {
     sort(write_set_.begin(), write_set_.end());
-    if (is_pcc_) sort(lock_set_.begin(), lock_set_.end());
+    if (is_pcc_) sort(read_lock_set_.begin(), read_lock_set_.end());
     lockWriteSet();
     if (this->status_ == TransactionStatus::aborted) return false;
     asm volatile("" ::: "memory");
@@ -346,7 +351,8 @@ void TxExecutor::writePhase() {
     gc_records();
     read_set_.clear();
     write_set_.clear();
-    lock_set_.clear();
+    read_lock_set_.clear();
+    write_lock_set_.clear();
     node_map_.clear();
 
     abort_cnt = 0;
@@ -361,12 +367,12 @@ bool TxExecutor::commit() {
     return false;
 }
 
-LockElement<Tuple>* TxExecutor::searchLockSet(const Storage s,
-                                              const std::string_view key) {
+LockElement<Tuple>* TxExecutor::searchReadLockSet(const Storage s,
+                                                  const std::string_view key) {
     const auto it = std::lower_bound(
-            lock_set_.begin(), lock_set_.end(),
+            read_lock_set_.begin(), read_lock_set_.end(),
             LockElement<Tuple>(s, key, nullptr, Tidword{}, LockType::UNLOCKED));
-    if (it != lock_set_.end() && it->key_ == key && it->storage_ == s) {
+    if (it != read_lock_set_.end() && it->key_ == key && it->storage_ == s) {
         return &(*it);
     }
     return nullptr;
@@ -374,8 +380,7 @@ LockElement<Tuple>* TxExecutor::searchLockSet(const Storage s,
 
 void TxExecutor::unlockRead() const {
     if (!is_pcc_) ERR;
-    for (const auto& le : lock_set_) {
-        if (le.lock_type_ == LockType::EX_LOCKED) continue;
+    for (const auto& le : read_lock_set_) {
         const Tidword expected = le.tidword_;
         Tidword desired = expected;
         if (expected.lock != LockType::SH_LOCKED) ERR;
@@ -386,8 +391,7 @@ void TxExecutor::unlockRead() const {
 
 void TxExecutor::unlockWrite() const {
     if (!is_pcc_) ERR;
-    for (const auto& le : lock_set_) {
-        if (le.lock_type_ == LockType::SH_LOCKED) continue;
+    for (const auto& le : write_lock_set_) {
         const Tidword expected = le.tidword_;
         Tidword desired = expected;
         if (expected.lock != LockType::EX_LOCKED) ERR;
