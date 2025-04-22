@@ -206,8 +206,15 @@ void TxExecutor::lockWriteSet() {
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
-            while (expected.lock == LockType::LATCHED)
+            while (expected.lock == LockType::LATCHED) {
+                if (FLAGS_no_wait) {
+                    itr->rcdptr_->mutex_.unlock();
+                    this->status_ = TransactionStatus::aborted;
+                    if (itr != write_set_.begin()) unlockWriteSet(itr);
+                    return;
+                }
                 expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
+            }
             if (expected.lock != LockType::UNLOCKED) ERR;
             if (expected.absent) {
                 itr->rcdptr_->mutex_.unlock();

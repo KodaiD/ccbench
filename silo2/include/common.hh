@@ -46,6 +46,7 @@ DEFINE_bool(batch_simple_rr, false,
             "No one touches update-only records of batch transaction.");
 DEFINE_bool(print_latencies, false,
             "True means print latencies of transactions.");
+DEFINE_bool(no_wait, false, "Enable no wait locking.");
 #else
 DECLARE_uint64(clocks_per_us);
 DECLARE_uint64(epoch_time);
@@ -65,6 +66,7 @@ DECLARE_uint64(batch_rratio);
 DECLARE_uint64(batch_tuples);
 DECLARE_bool(batch_simple_rr);
 DECLARE_bool(print_latencies);
+DECLARE_bool(no_wait);
 #endif
 
 alignas(CACHE_LINE_SIZE) GLOBAL uint32_t TotalThreadNum;

@@ -158,14 +158,12 @@ void TxExecutor::lockWriteSet() {
     expected.obj_ = loadAcquire((*itr).rcdptr_->tidword_.obj_);
     for (;;) {
       if (expected.lock) {
-#if NO_WAIT_LOCKING_IN_VALIDATION
-        this->status_ = TransactionStatus::aborted;
-        if (itr != write_set_.begin()) unlockWriteSet(itr);
-        return;
-#elif NO_WAIT_OF_TICTOC
-        if (itr != write_set_.begin()) unlockWriteSet(itr);
-        goto retry;
-#endif
+          if (FLAGS_no_wait) {
+              this->status_ = TransactionStatus::aborted;
+              if (itr != write_set_.begin()) unlockWriteSet(itr);
+              return;
+          }
+          expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
       } else {
         desired = expected;
         desired.lock = 1;
