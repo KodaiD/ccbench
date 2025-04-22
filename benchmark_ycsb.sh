@@ -30,12 +30,12 @@ for rratio in "${read_rates[@]}"; do
 #      print_latencies=1
 #    fi
     CMD="./build/${protocol}/ycsb_${protocol}.exe"
-    CMD+=" --ycsb-rratio ${rratio}"
-    CMD+=" --extime ${num_sec}"
-    CMD+=" --ycsb-max-ope ${num_ops}"
-    CMD+=" --ycsb-tuple-num ${num_rec}"
-    CMD+=" --thread-num ${thread}"
-    CMD+=" --print-latencies ${print_latencies}"
+    CMD+=" --ycsb-rratio=${rratio}"
+    CMD+=" --extime=${num_sec}"
+    CMD+=" --ycsb-max-ope=${num_ops}"
+    CMD+=" --ycsb-tuple-num=${num_rec}"
+    CMD+=" --thread-num=${thread}"
+    CMD+=" --print-latencies=${print_latencies}"
     echo ${CMD}
     echo Executing: ${CMD} >> ${dest}/ycsb-r${rratio}/${protocol}.log
     ${CMD} >> ${dest}/ycsb-r${rratio}/${protocol}.log || { echo "Error: Command failed - ${CMD}"; exit 1; }
