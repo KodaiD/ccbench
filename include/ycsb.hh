@@ -104,14 +104,14 @@ public:
 #endif
         tx.is_ronly_ = (*tx.pro_set_.begin()).ronly_;
 
+      const uint64_t start_ts = rdtscp();
+
 RETRY:
         if (tx.isLeader()) {
             tx.leaderWork();
         }
 
         if (loadAcquire(tx.quit_)) return;
-
-        const uint64_t start_ts = rdtscp();
 
         tx.begin();
         SimpleKey<8> key[tx.pro_set_.size()];
