@@ -119,7 +119,8 @@ public:
                 std::string_view right_key, bool r_exclusive,
                 std::vector<TupleBody*>& result, int64_t limit);
 
-    LockElement<Tuple>* searchReadLockSet(Storage s, std::string_view key);
+    std::vector<LockElement<Tuple>>::iterator
+    searchReadLockSet(Storage s, std::string_view key);
 
     void unlockRead() const;
 

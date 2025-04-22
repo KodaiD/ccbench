@@ -178,12 +178,14 @@ void TxExecutor::lockWriteSet() {
         Tidword expected;
         if (itr->op_ == OpType::INSERT) continue;
         if (is_pcc_) {
-            if (const auto le = searchReadLockSet(itr->storage_, itr->key_);
-                le && le->lock_type_ == LockType::SH_LOCKED) {
+            if (const auto rle = searchReadLockSet(itr->storage_, itr->key_);
+                rle != read_lock_set_.end()) {
                 const Tidword tid_word =
-                        upgrade_lock(le->rcdptr_, le->tidword_);
-                le->tidword_ = tid_word;
-                le->lock_type_ = LockType::EX_LOCKED;
+                        upgrade_lock(rle->rcdptr_, rle->tidword_);
+                read_lock_set_.erase(rle);
+                write_lock_set_.emplace_back(itr->storage_, itr->key_,
+                                             itr->rcdptr_, tid_word,
+                                             LockType::EX_LOCKED);
             } else {
                 Tidword tid_word = get_lock(itr->rcdptr_, LockType::EX_LOCKED);
                 if (tid_word.absent) {
@@ -367,15 +369,14 @@ bool TxExecutor::commit() {
     return false;
 }
 
-LockElement<Tuple>* TxExecutor::searchReadLockSet(const Storage s,
-                                                  const std::string_view key) {
+std::vector<LockElement<Tuple>>::iterator
+TxExecutor::searchReadLockSet(const Storage s, const std::string_view key) {
     const auto it = std::lower_bound(
             read_lock_set_.begin(), read_lock_set_.end(),
             LockElement<Tuple>(s, key, nullptr, Tidword{}, LockType::UNLOCKED));
-    if (it != read_lock_set_.end() && it->key_ == key && it->storage_ == s) {
-        return &(*it);
-    }
-    return nullptr;
+    if (it != read_lock_set_.end() && it->key_ == key && it->storage_ == s)
+        return it;
+    return read_lock_set_.end();
 }
 
 void TxExecutor::unlockRead() const {
