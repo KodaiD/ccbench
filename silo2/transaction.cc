@@ -105,7 +105,13 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
                          tuple->body_.get_val_align());
         Tidword check;
         check.obj_ = loadAcquire(tuple->tidword_.obj_);
-        if (expected == check) break;
+        if (expected.tid == check.tid &&
+            expected.epoch == check.epoch &&
+            expected.latest == check.latest &&
+            expected.absent == check.absent &&
+            (check.lock == LockType::UNLOCKED || check.lock == LockType::SH_LOCKED)) {
+            break;
+        }
         expected.obj_ = check.obj_;
     }
     read_set_.emplace_back(s, key, tuple, std::move(body), expected);
