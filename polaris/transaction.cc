@@ -165,6 +165,10 @@ void TxExecutor::lockWriteSet() {
                 return;
             }
             if (expected.lock) {
+                if (FLAGS_no_wait) {
+                    this->status_ = TransactionStatus::aborted;
+                    return;
+                }
                 expected.obj_ = loadAcquire(itr.rcdptr_->tidword_.obj_);
                 continue;
             }

@@ -13,13 +13,22 @@ def main():
     dest = os.path.join(os.getcwd(), "results")
 
     protocols = ["silo", "silo2", "polaris"]
-    threads = [1, 16, 32, 48, 64]
-    read_rates = [0, 1, 10, 50, 90, 99, 100]
-    num_recs = [1000, 1000000]
+    threads = [1, 4, 8]
+    read_rates = [50]
+    num_recs = [1000]
     num_ops = 10
     num_sec = 5
-    skews = [0, 0.99]
+    skews = [0.99]
     no_wait = [0, 1]
+
+    # protocols = ["silo", "silo2", "polaris"]
+    # threads = [1, 16, 32, 48, 64]
+    # read_rates = [0, 1, 10, 50, 90, 99, 100]
+    # num_recs = [1000, 1000000]
+    # num_ops = 10
+    # num_sec = 5
+    # skews = [0, 0.99]
+    # no_wait = [0, 1]
 
     for protocol in protocols:
         for rratio in read_rates:
@@ -29,7 +38,7 @@ def main():
                         dir_path = f"{dest}/ycsb-r{rratio}-{num_rec}records-{num_ops}ops-skew{skew}"
                         os.makedirs(dir_path, exist_ok=True)
 
-                        if protocol == "silo" or protocol == "silo2":
+                        if protocol == "silo" or protocol == "silo2" or protocol == "polaris":
                             log_file = f"{dir_path}/{protocol}-nowait{n}.log"
                         else:
                             log_file = f"{dir_path}/{protocol}.log"
@@ -44,7 +53,7 @@ def main():
 
                             print_latencies = 0
 
-                            if protocol == "silo" or protocol == "silo2":
+                            if protocol == "silo" or protocol == "silo2" or protocol == "polaris":
                                 cmd = [f"./build/{protocol}/ycsb_{protocol}.exe", f"--ycsb-rratio={rratio}",
                                        f"--extime={num_sec}", f"--ycsb-max-ope={num_ops}",
                                        f"--ycsb-tuple-num={num_rec}", f"--print-latencies={print_latencies}",
