@@ -225,6 +225,10 @@ void TxExecutor::lockWriteSet() {
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
+            Tidword desired = expected;
+            desired.lock = LockType::LATCHED;
+            storeRelease(itr->rcdptr_->tidword_.obj_, desired.obj_);
+            itr->rcdptr_->mutex_.unlock();
         }
         max_wset_ = std::max(max_wset_, expected);
     }
