@@ -62,6 +62,9 @@ void TxExecutor::begin() {
     max_wset_.obj_ = 0;
     max_rset_.obj_ = 0;
 
+    t = FLAGS_polaris_t;
+    s = FLAGS_polaris_s;
+
     if (abort_cnt < t) {
         prio = p0;
     } else {
