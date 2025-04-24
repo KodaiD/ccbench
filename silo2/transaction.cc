@@ -52,7 +52,7 @@ void TxExecutor::begin() {
     max_wset_.obj_ = 0;
     max_rset_.obj_ = 0;
     if (has_privilege()) {
-        if (abort_cnt > 0) {
+        if (abort_cnt >= FLAGS_threshold) {
             is_pcc_ = true;
         } else {
             is_pcc_ = false;

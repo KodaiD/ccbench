@@ -19,7 +19,10 @@ def main():
     num_ops = 10
     num_sec = 5
     skews = [0.99]
-    no_wait = [0, 1]
+    no_wait = [0]
+    polaris_t = 16
+    polaris_s = 4
+    silo2_threshold = 20
 
     # protocols = ["silo", "silo2", "polaris"]
     # threads = [1, 16, 32, 48, 64]
@@ -29,6 +32,9 @@ def main():
     # num_sec = 5
     # skews = [0, 0.99]
     # no_wait = [0, 1]
+    # polaris_t = 16
+    # polaris_s = 4
+    # silo2_threshold = 20
 
     for protocol in protocols:
         for rratio in read_rates:
@@ -63,6 +69,11 @@ def main():
                                        f"--extime={num_sec}", f"--ycsb-max-ope={num_ops}",
                                        f"--ycsb-tuple-num={num_rec}", f"--print-latencies={print_latencies}",
                                        f"--ycsb-zipf_skew={skew}", f"--thread-num={thread}"]
+
+                            if protocol == "polaris":
+                                cmd += [f"--polaris_t={polaris_t}", f"--polaris_s={polaris_s}"]
+                            elif protocol == "silo2":
+                                cmd += [f"--threshold={silo2_threshold}"]
 
                             cmd_str = " ".join(cmd)
                             print(f"{cmd_str} {log_file}")
