@@ -105,11 +105,11 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
                          tuple->body_.get_val_align());
         Tidword check;
         check.obj_ = loadAcquire(tuple->tidword_.obj_);
-        if (expected.tid == check.tid &&
-            expected.epoch == check.epoch &&
+        if (expected.tid == check.tid && expected.epoch == check.epoch &&
             expected.latest == check.latest &&
             expected.absent == check.absent &&
-            (check.lock == LockType::UNLOCKED || check.lock == LockType::SH_LOCKED)) {
+            (check.lock == LockType::UNLOCKED ||
+             check.lock == LockType::SH_LOCKED)) {
             break;
         }
         expected.obj_ = check.obj_;
@@ -203,26 +203,23 @@ void TxExecutor::lockWriteSet() {
                                              LockType::EX_LOCKED);
             }
         } else {
-            itr->rcdptr_->mutex_.lock();
             expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
             if (expected.lock == LockType::SH_LOCKED ||
-                expected.lock == LockType::EX_LOCKED) {
-                itr->rcdptr_->mutex_.unlock();
+                expected.lock == LockType::EX_LOCKED ||
+                expected.lock == LockType::LATCHED) {
                 this->status_ = TransactionStatus::aborted;
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
-            while (expected.lock == LockType::LATCHED) {
-                if (FLAGS_no_wait) {
-                    itr->rcdptr_->mutex_.unlock();
-                    this->status_ = TransactionStatus::aborted;
-                    if (itr != write_set_.begin()) unlockWriteSet(itr);
-                    return;
-                }
-                expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
-            }
             if (expected.lock != LockType::UNLOCKED) ERR;
             if (expected.absent) {
+                this->status_ = TransactionStatus::aborted;
+                if (itr != write_set_.begin()) unlockWriteSet(itr);
+                return;
+            }
+            itr->rcdptr_->mutex_.lock();
+            expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
+            if (expected.lock != LockType::UNLOCKED) {
                 itr->rcdptr_->mutex_.unlock();
                 this->status_ = TransactionStatus::aborted;
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
@@ -436,7 +433,7 @@ void TxExecutor::unlockWriteSet() {
     for (const auto& itr : write_set_) {
         Tidword expected;
         if (itr.op_ == OpType::INSERT) continue;
-        expected.obj_ = loadAcquire(itr.rcdptr_->tidword_.obj_);
+        expected.obj_ = loadRelaxed(itr.rcdptr_->tidword_.obj_);
         if (expected.lock == LockType::UNLOCKED) ERR;
         Tidword desired = expected;
         desired.lock = LockType::UNLOCKED;
@@ -450,7 +447,7 @@ void TxExecutor::unlockWriteSet(
     for (auto itr = write_set_.begin(); itr != end; ++itr) {
         Tidword expected;
         if (itr->op_ == OpType::INSERT) continue;
-        expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
+        expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
         if (expected.lock == LockType::UNLOCKED) ERR;
         Tidword desired = expected;
         desired.lock = LockType::UNLOCKED;
@@ -522,11 +519,9 @@ Tidword TxExecutor::get_lock(Tuple* tuple, const LockType lock_type) {
 
 Tidword TxExecutor::upgrade_lock(Tuple* tuple, const Tidword current) {
     if (current.lock != LockType::SH_LOCKED) ERR;
-    tuple->mutex_.lock();
     Tidword desired = current;
     desired.lock = LockType::EX_LOCKED;
     storeRelease(tuple->tidword_.obj_, desired.obj_);
-    tuple->mutex_.unlock();
     return desired;
 }
 
