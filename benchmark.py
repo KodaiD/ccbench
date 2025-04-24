@@ -22,7 +22,7 @@ def main():
     no_wait = [0]
     polaris_t = 16
     polaris_s = 4
-    silo2_threshold = 20
+    silo2_threshold = polaris_t + polaris_s
 
     # protocols = ["silo", "silo2", "polaris"]
     # threads = [1, 16, 32, 48, 64]
@@ -34,7 +34,7 @@ def main():
     # no_wait = [0, 1]
     # polaris_t = 16
     # polaris_s = 4
-    # silo2_threshold = 20
+    # silo2_threshold = polaris_t + polaris_s
 
     for protocol in protocols:
         for rratio in read_rates:
