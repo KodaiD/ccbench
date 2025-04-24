@@ -218,17 +218,13 @@ void TxExecutor::lockWriteSet() {
                 return;
             }
             itr->rcdptr_->mutex_.lock();
-            expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
+            expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
             if (expected.lock != LockType::UNLOCKED) {
                 itr->rcdptr_->mutex_.unlock();
                 this->status_ = TransactionStatus::aborted;
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
-            Tidword desired = expected;
-            desired.lock = LockType::LATCHED;
-            storeRelease(itr->rcdptr_->tidword_.obj_, desired.obj_);
-            itr->rcdptr_->mutex_.unlock();
         }
         max_wset_ = std::max(max_wset_, expected);
     }
@@ -433,7 +429,7 @@ void TxExecutor::unlockWriteSet() {
     for (const auto& itr : write_set_) {
         Tidword expected;
         if (itr.op_ == OpType::INSERT) continue;
-        expected.obj_ = loadRelaxed(itr.rcdptr_->tidword_.obj_);
+        expected.obj_ = loadAcquire(itr.rcdptr_->tidword_.obj_);
         if (expected.lock == LockType::UNLOCKED) ERR;
         Tidword desired = expected;
         desired.lock = LockType::UNLOCKED;
@@ -447,7 +443,7 @@ void TxExecutor::unlockWriteSet(
     for (auto itr = write_set_.begin(); itr != end; ++itr) {
         Tidword expected;
         if (itr->op_ == OpType::INSERT) continue;
-        expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
+        expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
         if (expected.lock == LockType::UNLOCKED) ERR;
         Tidword desired = expected;
         desired.lock = LockType::UNLOCKED;
