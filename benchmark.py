@@ -19,7 +19,7 @@ def main():
     num_ops = 10
     num_sec = 5
     skews = [0.99]
-    no_wait = [0]
+    no_wait = [1]
     polaris_t = 16
     polaris_s = 4
     silo2_threshold = polaris_t + polaris_s
@@ -31,7 +31,7 @@ def main():
     # num_ops = 10
     # num_sec = 5
     # skews = [0, 0.99]
-    # no_wait = [0, 1]
+    # no_wait = [1]
     # polaris_t = 16
     # polaris_s = 4
     # silo2_threshold = polaris_t + polaris_s

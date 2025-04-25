@@ -64,6 +64,9 @@ void TxExecutor::begin() {
 }
 
 Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
+    if (has_privilege() && abort_cnt < FLAGS_threshold) {
+        hand_over_privilege();
+    }
     if (WriteElement<Tuple>* we = searchWriteSet(s, key)) {
         *body = &(we->body_);
         return Status::OK;
@@ -119,6 +122,9 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
 }
 
 Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
+    if (has_privilege() && abort_cnt < FLAGS_threshold) {
+        hand_over_privilege();
+    }
     if (searchWriteSet(s, key)) return Status::OK;
     Tuple* tuple;
     if (ReadElement<Tuple>* re = searchReadSet(s, key)) {
@@ -133,6 +139,9 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
 }
 
 Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
+    if (has_privilege() && abort_cnt < FLAGS_threshold) {
+        hand_over_privilege();
+    }
     if (searchWriteSet(s, key)) return Status::WARN_ALREADY_EXISTS;
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple != nullptr) return Status::WARN_ALREADY_EXISTS;
@@ -169,6 +178,9 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
 }
 
 Status TxExecutor::delete_record(Storage s, std::string_view key) {
+    if (has_privilege() && abort_cnt < FLAGS_threshold) {
+        hand_over_privilege();
+    }
     for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
         if (itr->storage_ != s) continue;
         if (itr->key_ == key) write_set_.erase(itr);
@@ -244,6 +256,9 @@ Status TxExecutor::scan(const Storage s, std::string_view left_key,
                         const bool l_exclusive, std::string_view right_key,
                         const bool r_exclusive, std::vector<TupleBody*>& result,
                         const int64_t limit) {
+    if (has_privilege() && abort_cnt < FLAGS_threshold) {
+        hand_over_privilege();
+    }
     result.clear();
     const auto read_set_init_size = read_set_.size();
     std::vector<Tuple*> scan_res;
