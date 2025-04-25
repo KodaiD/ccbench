@@ -229,7 +229,11 @@ void TxExecutor::lockWriteSet() {
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
-            itr->rcdptr_->mutex_.lock();
+            if (!itr->rcdptr_->mutex_.try_lock()) {
+                this->status_ = TransactionStatus::aborted;
+                if (itr != write_set_.begin()) unlockWriteSet(itr);
+                return;
+            }
             expected.obj_ = loadAcquire(itr->rcdptr_->tidword_.obj_);
             if (expected.lock != LockType::UNLOCKED) {
                 itr->rcdptr_->mutex_.unlock();
