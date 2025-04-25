@@ -2,56 +2,55 @@
 
 #include <atomic>
 
-class MCSMutex
-{
+class MCSMutex {
 public:
-    MCSMutex() : tail_(nullptr)
-    {
+    MCSMutex() : tail_(nullptr) {}
+
+    bool try_lock() {
+        auto tail = tail_.load(std::memory_order_acquire);
+        while (tail == nullptr) {
+            if (tail_.compare_exchange_weak(tail, &my_node_,
+                                            std::memory_order_acquire,
+                                            std::memory_order_relaxed)) {
+                return true;
+            }
+        }
+        return false;
     }
 
-    void lock()
-    {
-        if (MCSNode* prev = tail_.exchange(&my_node_, std::memory_order_acquire); prev != nullptr)
-        {
+    void lock() {
+        if (MCSNode* prev =
+                    tail_.exchange(&my_node_, std::memory_order_acquire);
+            prev != nullptr) {
             my_node_.locked = true;
             prev->next.store(&my_node_, std::memory_order_release);
-            while (my_node_.locked.load(std::memory_order_acquire))
-            {
-            }
+            while (my_node_.locked.load(std::memory_order_acquire)) {}
         }
     }
 
-    void unlock()
-    {
+    void unlock() {
         MCSNode* next = my_node_.next;
-        if (next == nullptr)
-        {
-            if (MCSNode* expected = &my_node_;
-                tail_.compare_exchange_strong(expected, nullptr, std::memory_order_release))
-            {
+        if (next == nullptr) {
+            if (MCSNode* expected = &my_node_; tail_.compare_exchange_strong(
+                        expected, nullptr, std::memory_order_release,
+                        std::memory_order_relaxed)) {
                 my_node_.reset();
                 return;
             }
-            while ((next = my_node_.next) == nullptr)
-            {
-            }
+            while ((next = my_node_.next) == nullptr) {}
         }
         next->locked.store(false, std::memory_order_release);
         my_node_.reset();
     }
 
 private:
-    struct MCSNode
-    {
+    struct MCSNode {
         std::atomic<bool> locked;
         std::atomic<MCSNode*> next;
 
-        MCSNode() : locked(false), next(nullptr)
-        {
-        }
+        MCSNode() : locked(false), next(nullptr) {}
 
-        void reset()
-        {
+        void reset() {
             locked.store(false);
             next.store(nullptr);
         }
