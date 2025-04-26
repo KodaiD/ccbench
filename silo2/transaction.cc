@@ -56,6 +56,7 @@ void TxExecutor::begin() {
         } else {
             is_pcc_ = false;
             hand_over_privilege();
+            storeRelease(privileges_[thid_], ACTIVE);
         }
     } else {
         is_pcc_ = false;
@@ -63,9 +64,6 @@ void TxExecutor::begin() {
 }
 
 Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
-    if (has_privilege() && abort_cnt < FLAGS_threshold) {
-        hand_over_privilege();
-    }
     if (WriteElement<Tuple>* we = searchWriteSet(s, key)) {
         *body = &(we->body_);
         return Status::OK;
@@ -121,9 +119,6 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
 }
 
 Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
-    if (has_privilege() && abort_cnt < FLAGS_threshold) {
-        hand_over_privilege();
-    }
     if (searchWriteSet(s, key)) return Status::OK;
     Tuple* tuple;
     if (ReadElement<Tuple>* re = searchReadSet(s, key)) {
@@ -138,9 +133,6 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
 }
 
 Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
-    if (has_privilege() && abort_cnt < FLAGS_threshold) {
-        hand_over_privilege();
-    }
     if (searchWriteSet(s, key)) return Status::WARN_ALREADY_EXISTS;
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple != nullptr) return Status::WARN_ALREADY_EXISTS;
@@ -177,9 +169,6 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
 }
 
 Status TxExecutor::delete_record(Storage s, std::string_view key) {
-    if (has_privilege() && abort_cnt < FLAGS_threshold) {
-        hand_over_privilege();
-    }
     for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
         if (itr->storage_ != s) continue;
         if (itr->key_ == key) write_set_.erase(itr);
@@ -259,9 +248,6 @@ Status TxExecutor::scan(const Storage s, std::string_view left_key,
                         const bool l_exclusive, std::string_view right_key,
                         const bool r_exclusive, std::vector<TupleBody*>& result,
                         const int64_t limit) {
-    if (has_privilege() && abort_cnt < FLAGS_threshold) {
-        hand_over_privilege();
-    }
     result.clear();
     const auto read_set_init_size = read_set_.size();
     std::vector<Tuple*> scan_res;
@@ -386,7 +372,25 @@ void TxExecutor::writePhase() {
     node_map_.clear();
 
     abort_cnt = 0;
-    if (is_pcc_) hand_over_privilege();
+    if (is_pcc_) {
+        hand_over_privilege();
+        storeRelease(privileges_[thid_], IDLE);
+    } else {
+        auto expected = loadRelaxed(privileges_[thid_]);
+        while (true) {
+            if (expected == ACTIVE) {
+                storeRelease(privileges_[thid_], IDLE);
+                break;
+            }
+            if (expected == SUPER) {
+                hand_over_privilege();
+                storeRelease(privileges_[thid_], IDLE);
+                break;
+            }
+            assert(expected == RETRYING);
+            if (compareExchange(privileges_[thid_], expected, IDLE)) break;
+        }
+    }
 }
 
 bool TxExecutor::commit() {
@@ -502,14 +506,25 @@ void TxScanCallback::on_resp_node(const MasstreeWrapper<Tuple>::node_type* n,
 }
 
 bool TxExecutor::has_privilege() const {
-    return loadAcquire(privileges_[thid_]) == 1;
+    return loadAcquire(privileges_[thid_]) == SUPER;
 }
 
 void TxExecutor::hand_over_privilege() const {
-    storeRelease(privileges_[thid_], 0);
-    if (thid_ == privileges_.size() - 1) storeRelease(privileges_[0], 1);
-    else
-        storeRelease(privileges_[thid_ + 1], 1);
+    size_t i = thid_;
+    if (i == privileges_.size()) i = 0;
+    while (true) {
+        auto expected = loadAcquire(privileges_[i]);
+        if (expected != RETRYING) {
+            i++;
+            if (i == privileges_.size()) i = 0;
+            if (i == thid_) break;
+            continue;
+        }
+        if (compareExchange(privileges_[thid_], expected, SUPER)) break;
+        i++;
+        if (i == privileges_.size()) i = 0;
+        if (i == thid_) break;
+    }
 }
 
 Tidword TxExecutor::get_lock(Tuple* tuple, const LockType lock_type) {

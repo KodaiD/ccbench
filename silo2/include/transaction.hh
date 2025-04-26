@@ -27,6 +27,11 @@ enum class TransactionStatus : uint8_t {
     aborted,
 };
 
+constexpr uint64_t IDLE = 0;
+constexpr uint64_t SUPER = 1;
+constexpr uint64_t ACTIVE = 2;
+constexpr uint64_t RETRYING = 3;
+
 class TxScanCallback;
 
 class TxExecutor {
