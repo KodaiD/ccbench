@@ -27,7 +27,6 @@ void TxExecutor::abort() {
     if (is_pcc_) {
         unlockRead();
         unlockWrite();
-        hand_over_privilege();
     }
     for (auto& we : write_set_) {
         if (we.op_ == OpType::INSERT) {
