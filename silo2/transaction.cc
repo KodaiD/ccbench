@@ -48,6 +48,7 @@ void TxExecutor::abort() {
 
 void TxExecutor::begin() {
     status_ = TransactionStatus::inflight;
+    atomicStoreThLocalEpoch(thid_, atomicLoadGE());
     max_wset_.obj_ = 0;
     max_rset_.obj_ = 0;
     if (has_privilege()) {

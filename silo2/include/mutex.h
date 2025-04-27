@@ -8,7 +8,8 @@ public:
 
     bool try_lock() {
         auto tail = tail_.load(std::memory_order_acquire);
-        while (tail == nullptr) {
+        while (true) {
+            if (tail != nullptr) break;
             if (tail_.compare_exchange_weak(tail, &my_node_,
                                             std::memory_order_acquire,
                                             std::memory_order_relaxed)) {
