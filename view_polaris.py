@@ -38,21 +38,18 @@ for dirpath, dirnames, filenames in os.walk(csv_dir):
                 plot_data = data_row.drop('# of threads', errors='ignore')
 
 
-                # 's' の値を抽出してソートキーとする
                 def extract_s_value(label):
                     match = re.search(r'-s(\d+)-', label)
                     if match:
                         return int(match.group(1))
-                    return -1  # 抽出できない場合は負の値などでソート順を最後にする
+                    return -1
 
 
-                # データのインデックスを 's' の値でソート
                 sorted_indices = sorted(plot_data.index, key=extract_s_value)
                 sorted_plot_data = plot_data.reindex(sorted_indices)
 
                 plt.figure(figsize=(15, 7))
 
-                # ソート済みのデータをプロット
                 sorted_plot_data.plot(kind='bar')
 
                 plt.title(
@@ -60,7 +57,6 @@ for dirpath, dirnames, filenames in os.walk(csv_dir):
                 plt.xlabel('s value')
                 plt.ylabel('Metric Value')
 
-                # ソート済みのデータのインデックスから 's' の値を再抽出してラベルとする
                 s_values_sorted = [str(extract_s_value(label)) if extract_s_value(label) != -1 else '' for label in
                                    sorted_plot_data.index]
 
