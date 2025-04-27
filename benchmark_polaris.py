@@ -60,7 +60,7 @@ def main():
                                            f"--extime={num_sec}", f"--ycsb-max-ope={num_ops}",
                                            f"--ycsb-tuple-num={num_rec}", f"--print-latencies={print_latencies}",
                                            f"--ycsb-zipf_skew={skew}", f"--thread-num={thread}", f"--polaris_t={polaris_t}",
-                                           f"polaris_s={polaris_s}", f"--no_wait={n}"]
+                                           f"--polaris_s={polaris_s}", f"--no_wait={n}"]
 
                                     cmd_str = " ".join(cmd)
                                     print(f"{cmd_str} {log_file}")
