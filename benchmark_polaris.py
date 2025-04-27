@@ -19,9 +19,9 @@ def main():
     num_ops = 10
     num_sec = 1
     skews = [0.99]
-    no_wait = [0]
-    polaris_t_array = [0, 2, 4, 8, 16, 32, 64]
-    polaris_s_array = [1, 2, 4, 8, 16, 32, 64]
+    no_wait = [1]
+    polaris_t_array = [0]
+    polaris_s_array = [1, 2, 4, 8, 16, 24, 32, 40, 48, 56, 64]
 
     # protocols = ["polaris"]
     # threads = [64]
@@ -30,8 +30,8 @@ def main():
     # num_ops = 10
     # num_sec = 5
     # skews = [0.99]
-    # no_wait = [0]
-    # polaris_t_array = [0, 2, 4, 8, 16, 32, 64]
+    # no_wait = [1]
+    # polaris_t_array = [0]
     # polaris_s_array = [1, 2, 4, 8, 16, 32, 64]
 
     for protocol in protocols:
