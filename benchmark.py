@@ -25,12 +25,12 @@ def main():
     silo2_threshold = polaris_t + polaris_s
 
     # protocols = ["silo", "silo2", "polaris"]
-    # threads = [1, 16, 32, 48, 64]
-    # read_rates = [0, 1, 10, 50, 90, 99, 100]
-    # num_recs = [1000, 1000000]
+    # threads = [1, 32, 64]
+    # read_rates = [50]
+    # num_recs = [1000000]
     # num_ops = 10
     # num_sec = 5
-    # skews = [0, 0.99]
+    # skews = [0.99]
     # no_wait = [1]
     # polaris_t = 16
     # polaris_s = 4
