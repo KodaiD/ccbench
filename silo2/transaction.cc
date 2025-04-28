@@ -144,6 +144,7 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     const Status stat =
             Masstrees[get_storage(s)].insert_value(key, tuple, &insert_info);
     if (stat == Status::WARN_ALREADY_EXISTS) {
+        tuple->mutex_.unlock();
         delete tuple;
         return stat;
     }
@@ -153,6 +154,7 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
             if (const auto it = node_map_.find((void*) insert_info.node);
                 it != node_map_.end()) {
                 if (unlikely(it->second != insert_info.old_version)) {
+                    tuple->mutex_.unlock();
                     status_ = TransactionStatus::aborted;
                     return Status::ERROR_CONCURRENT_WRITE_OR_DELETE;
                 }

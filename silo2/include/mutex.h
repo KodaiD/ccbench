@@ -30,7 +30,7 @@ public:
     }
 
     void read_lock() {
-        my_node_.is_read = true;
+        my_node_.is_read.store(true);
         if (MCSNode* prev =
                     tail_.exchange(&my_node_, std::memory_order_acquire);
             prev != nullptr) {
@@ -45,7 +45,7 @@ public:
         if (const auto node = tail_.load(std::memory_order_acquire);
             node != &my_node_)
             throw std::runtime_error("not my node");
-        my_node_.is_read = false;
+        my_node_.is_read.store(false, std::memory_order_release);
     }
 
     void unlock() {
@@ -66,21 +66,21 @@ public:
     [[nodiscard]] bool is_locked() const {
         const auto tail = tail_.load(std::memory_order_acquire);
         if (tail == nullptr) return false;
-        return !tail->is_read;
+        return !tail->is_read.load(std::memory_order_acquire);
     }
 
 private:
     struct MCSNode {
         std::atomic<bool> locked;
         std::atomic<MCSNode*> next;
-        bool is_read;
+        std::atomic<bool> is_read;
 
         MCSNode() : locked(false), next(nullptr), is_read(false) {}
 
         void reset() {
             locked.store(false);
             next.store(nullptr);
-            is_read = false;
+            is_read.store(false);
         }
     };
 
