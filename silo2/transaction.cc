@@ -48,7 +48,7 @@ void TxExecutor::begin() {
     max_rset_.obj_ = 0;
     if (has_privilege()) {
         if (abort_cnt >= FLAGS_threshold) {
-            is_pcc_ = false;
+            is_pcc_ = true;
         } else {
             is_pcc_ = false;
             hand_over_privilege();
