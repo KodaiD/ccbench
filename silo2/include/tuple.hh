@@ -47,9 +47,9 @@ public:
         body_ = std::move(body);
     }
 
-    void init(TupleBody&& body) {
+    void init(const size_t thid, TupleBody&& body) {
         tidword_.absent = true;
-        mutex_.lock();
+        mutex_.lock(thid);
         body_ = std::move(body);
     }
 };

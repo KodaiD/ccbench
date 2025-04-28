@@ -6,8 +6,6 @@
 #include "include/scan_callback.hh"
 #include "include/transaction.hh"
 
-thread_local MCSMutex::MCSNode MCSMutex::my_node_;
-
 extern std::vector<Result> SiloResult;
 extern void displayDB();
 extern void siloLeaderWork(uint64_t& epoch_timer_start,
@@ -78,11 +76,13 @@ Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
 Status TxExecutor::read_internal(Storage s, std::string_view key,
                                  Tuple* tuple) {
     if (is_pcc_) {
-        tuple->mutex_.read_lock();
+        tuple->mutex_.read_lock(thid_);
+        ;
         Tidword tid_word;
         tid_word.obj_ = loadRelaxed(tuple->tidword_.obj_);
         if (tid_word.absent) {
-            tuple->mutex_.unlock();
+            tuple->mutex_.unlock(thid_);
+            ;
             return Status::WARN_NOT_FOUND;
         }
         auto body = TupleBody(key, tuple->body_.get_val(),
@@ -139,12 +139,13 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple != nullptr) return Status::WARN_ALREADY_EXISTS;
     tuple = new Tuple();
-    tuple->init(std::move(body));
+    tuple->init(thid_, std::move(body));
     MasstreeWrapper<Tuple>::insert_info_t insert_info{};
     const Status stat =
             Masstrees[get_storage(s)].insert_value(key, tuple, &insert_info);
     if (stat == Status::WARN_ALREADY_EXISTS) {
-        tuple->mutex_.unlock();
+        tuple->mutex_.unlock(thid_);
+        ;
         delete tuple;
         return stat;
     }
@@ -154,7 +155,8 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
             if (const auto it = node_map_.find((void*) insert_info.node);
                 it != node_map_.end()) {
                 if (unlikely(it->second != insert_info.old_version)) {
-                    tuple->mutex_.unlock();
+                    tuple->mutex_.unlock(thid_);
+                    ;
                     status_ = TransactionStatus::aborted;
                     return Status::ERROR_CONCURRENT_WRITE_OR_DELETE;
                 }
@@ -188,28 +190,30 @@ void TxExecutor::lockWriteSet() {
         if (is_pcc_) {
             if (auto re = searchReadSetIterator(itr->storage_, itr->key_);
                 re != read_set_.end()) {
-                itr->rcdptr_->mutex_.upgrade();
+                itr->rcdptr_->mutex_.upgrade(thid_);
                 read_set_.erase(re);
             } else {
-                itr->rcdptr_->mutex_.lock();
-                Tidword tid_word;
-                tid_word.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
-                if (tid_word.absent) {
-                    itr->rcdptr_->mutex_.unlock();
+                itr->rcdptr_->mutex_.lock(thid_);
+                ;
+                expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
+                if (expected.absent) {
+                    itr->rcdptr_->mutex_.unlock(thid_);
+                    ;
                     this->status_ = TransactionStatus::aborted;
                     if (itr != write_set_.begin()) unlockWriteSet(itr);
                     return;
                 }
             }
         } else {
-            if (!itr->rcdptr_->mutex_.try_lock()) {
+            if (!itr->rcdptr_->mutex_.try_lock(thid_)) {
                 this->status_ = TransactionStatus::aborted;
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
             expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
             if (expected.absent) {
-                itr->rcdptr_->mutex_.unlock();
+                itr->rcdptr_->mutex_.unlock(thid_);
+                ;
                 this->status_ = TransactionStatus::aborted;
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
@@ -319,13 +323,15 @@ void TxExecutor::writePhase() {
                 memcpy(itr.rcdptr_->body_.get_val_ptr(),
                        itr.body_.get_val_ptr(), itr.body_.get_val_size());
                 storeRelease(itr.rcdptr_->tidword_.obj_, max_tid_word.obj_);
-                itr.rcdptr_->mutex_.unlock();
+                itr.rcdptr_->mutex_.unlock(thid_);
+                ;
                 break;
             }
             case OpType::INSERT: {
                 max_tid_word.absent = false;
                 storeRelease(itr.rcdptr_->tidword_.obj_, max_tid_word.obj_);
-                itr.rcdptr_->mutex_.unlock();
+                itr.rcdptr_->mutex_.unlock(thid_);
+                ;
                 break;
             }
             case OpType::DELETE: {
@@ -333,7 +339,8 @@ void TxExecutor::writePhase() {
                 Masstrees[get_storage(itr.storage_)].remove_value(itr.key_);
                 storeRelease(itr.rcdptr_->tidword_.obj_, max_tid_word.obj_);
                 gc_records_.push_back(itr.rcdptr_);
-                itr.rcdptr_->mutex_.unlock();
+                itr.rcdptr_->mutex_.unlock(thid_);
+                ;
                 break;
             }
             default:
@@ -359,7 +366,8 @@ bool TxExecutor::commit() {
 
 void TxExecutor::unlockReadSet() const {
     if (!is_pcc_) ERR;
-    for (const auto& re : read_set_) re.rcdptr_->mutex_.unlock();
+    for (const auto& re : read_set_) re.rcdptr_->mutex_.unlock(thid_);
+    ;
 }
 
 vector<ReadElement<Tuple>>::iterator
@@ -389,13 +397,15 @@ WriteElement<Tuple>* TxExecutor::searchWriteSet(Storage s,
 }
 
 void TxExecutor::unlockWriteSet() {
-    for (const auto& itr : write_set_) itr.rcdptr_->mutex_.unlock();
+    for (const auto& itr : write_set_) itr.rcdptr_->mutex_.unlock(thid_);
+    ;
 }
 
 void TxExecutor::unlockWriteSet(
         const std::vector<WriteElement<Tuple>>::iterator end) {
     for (auto itr = write_set_.begin(); itr != end; ++itr)
-        itr->rcdptr_->mutex_.unlock();
+        itr->rcdptr_->mutex_.unlock(thid_);
+    ;
 }
 
 bool TxExecutor::isLeader() const { return this->thid_ == 0; }
