@@ -8,21 +8,13 @@
 
 #include "mutex.h"
 
-enum class LockType : uint64_t {
-    UNLOCKED = 0,
-    LATCHED = 1,
-    SH_LOCKED = 2,
-    EX_LOCKED = 3,
-};
-
 struct Tidword {
     union {
         uint64_t obj_;
         struct {
-            LockType lock : 2;
             bool latest : 1;
             bool absent : 1;
-            uint64_t tid : 28;
+            uint64_t tid : 20;
             uint64_t epoch : 32;
         };
     };
@@ -52,13 +44,12 @@ public:
         tidword_.epoch = 1;
         tidword_.latest = true;
         tidword_.absent = false;
-        tidword_.lock = LockType::UNLOCKED;
         body_ = std::move(body);
     }
 
     void init(TupleBody&& body) {
         tidword_.absent = true;
-        tidword_.lock = LockType::LATCHED;
+        mutex_.lock();
         body_ = std::move(body);
     }
 };

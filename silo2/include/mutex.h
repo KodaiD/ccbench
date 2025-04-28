@@ -29,6 +29,25 @@ public:
         }
     }
 
+    void read_lock() {
+        my_node_.is_read = true;
+        if (MCSNode* prev =
+                    tail_.exchange(&my_node_, std::memory_order_acquire);
+            prev != nullptr) {
+            my_node_.locked = true;
+            prev->next.store(&my_node_, std::memory_order_release);
+            while (my_node_.locked.load(std::memory_order_acquire)) {}
+        }
+    }
+
+    // Because normal tx does not wait for read lock, tail_ is always me
+    void upgrade() const {
+        if (const auto node = tail_.load(std::memory_order_acquire);
+            node != &my_node_)
+            throw std::runtime_error("not my node");
+        my_node_.is_read = false;
+    }
+
     void unlock() {
         MCSNode* next = my_node_.next;
         if (next == nullptr) {
@@ -44,16 +63,24 @@ public:
         my_node_.reset();
     }
 
+    [[nodiscard]] bool is_locked() const {
+        const auto tail = tail_.load(std::memory_order_acquire);
+        if (tail == nullptr) return false;
+        return !tail->is_read;
+    }
+
 private:
     struct MCSNode {
         std::atomic<bool> locked;
         std::atomic<MCSNode*> next;
+        bool is_read;
 
-        MCSNode() : locked(false), next(nullptr) {}
+        MCSNode() : locked(false), next(nullptr), is_read(false) {}
 
         void reset() {
             locked.store(false);
             next.store(nullptr);
+            is_read = false;
         }
     };
 

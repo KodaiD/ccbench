@@ -78,21 +78,3 @@ private:
     std::unique_ptr<char[]> val_ptr_; // NOLINT
     std::size_t val_length_{};
 };
-
-template<typename T>
-class LockElement : public OpElement<T> {
-public:
-    Tidword tidword_;
-    LockType lock_type_;
-
-    LockElement(Storage s, std::string_view key, T* rcdptr,
-                const Tidword tidword, const LockType lock_type)
-        : OpElement<T>::OpElement(s, key, rcdptr), tidword_(tidword),
-          lock_type_(lock_type) {}
-
-    bool operator<(const LockElement& right) const {
-        if (this->storage_ != right.storage_)
-            return this->storage_ < right.storage_;
-        return this->key_ < right.key_;
-    }
-};
