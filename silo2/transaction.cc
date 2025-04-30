@@ -37,6 +37,7 @@ void TxExecutor::abort() {
     if (is_pcc_) unlockReadSet();
     for (auto& we : write_set_) {
         if (we.op_ == OpType::INSERT) {
+            we.rcdptr_->mutex_.unlock(we.node_);
             Masstrees[get_storage(we.storage_)].remove_value(we.key_);
             delete we.rcdptr_;
         }
@@ -204,6 +205,7 @@ void TxExecutor::lockWriteSet() {
             if (auto re = searchReadSetIterator(itr->storage_, itr->key_);
                 re != read_set_.end()) {
                 itr->rcdptr_->mutex_.upgrade(re->node_);
+                itr->node_ = re->node_;
                 read_set_.erase(re);
             } else {
                 const auto node = allocate_node();
@@ -458,6 +460,8 @@ void TxExecutor::hand_over_privilege() const {
         storeRelease(privileges_[thid_ + 1], 1);
 }
 
-MCSMutex::MCSNode* TxExecutor::allocate_node() {
-    return &lock_nodes_[next_free_node++];
+inline MCSMutex::MCSNode* TxExecutor::allocate_node() {
+    size_t idx = next_free_node;
+    if (++next_free_node == NODE_POOL_SIZE) next_free_node = 0;
+    return &lock_nodes_[idx];
 }

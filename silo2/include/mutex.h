@@ -66,9 +66,9 @@ public:
     }
 
     struct MCSNode {
-        std::atomic<bool> locked;
-        std::atomic<MCSNode*> next;
-        std::atomic<bool> is_read;
+        std::atomic<bool> locked = false;
+        std::atomic<MCSNode*> next = nullptr;
+        std::atomic<bool> is_read = false;
 
         MCSNode() = default;
 
