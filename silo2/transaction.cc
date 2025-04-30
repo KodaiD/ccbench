@@ -11,6 +11,21 @@ extern void displayDB();
 extern void siloLeaderWork(uint64_t& epoch_timer_start,
                            uint64_t& epoch_timer_stop);
 
+TxExecutor::TxExecutor(int thid, Result* res, const bool& quit,
+                       std::vector<uint64_t>& privileges)
+    : result_(res), backoff_(FLAGS_clocks_per_us), quit_(quit),
+      callback_(TxScanCallback(this)), status_(), thid_(thid),
+      privileges_(privileges) {
+    max_rset_.obj_ = 0;
+    max_wset_.obj_ = 0;
+    epoch_timer_start = rdtsc();
+    epoch_timer_stop = 0;
+    for (auto& [fst, snd] : lock_nodes_) {
+        fst.reset();
+        snd = false;
+    }
+}
+
 void TxExecutor::gc_records() {
     const auto r_epoch = ReclamationEpoch;
     while (!gc_records_.empty()) {
@@ -76,18 +91,18 @@ Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
 Status TxExecutor::read_internal(Storage s, std::string_view key,
                                  Tuple* tuple) {
     if (is_pcc_) {
-        tuple->mutex_.read_lock(thid_);
-        ;
+        auto node = allocate_node();
+        tuple->mutex_.read_lock(thid_, node);
         Tidword tid_word;
         tid_word.obj_ = loadRelaxed(tuple->tidword_.obj_);
         if (tid_word.absent) {
-            tuple->mutex_.unlock(thid_);
-            ;
+            tuple->mutex_.unlock(thid_, node);
+            deallocate_node(node);
             return Status::WARN_NOT_FOUND;
         }
         auto body = TupleBody(key, tuple->body_.get_val(),
                               tuple->body_.get_val_align());
-        read_set_.emplace_back(s, key, tuple, std::move(body), tid_word);
+        read_set_.emplace_back(s, key, tuple, std::move(body), tid_word, node);
         return Status::OK;
     }
     TupleBody body;
@@ -110,7 +125,7 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
         }
         expected.obj_ = check.obj_;
     }
-    read_set_.emplace_back(s, key, tuple, std::move(body), expected);
+    read_set_.emplace_back(s, key, tuple, std::move(body), expected, nullptr);
     return Status::OK;
 }
 
@@ -122,12 +137,14 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
     Tuple* tuple;
     if (ReadElement<Tuple>* re = searchReadSet(s, key)) {
         tuple = re->rcdptr_;
-        write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE);
+        write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE,
+                                re->node_);
         return Status::OK;
     }
     tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
-    write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE);
+    write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE,
+                            nullptr);
     return Status::OK;
 }
 
@@ -139,24 +156,25 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple != nullptr) return Status::WARN_ALREADY_EXISTS;
     tuple = new Tuple();
-    tuple->init(thid_, std::move(body));
+    auto node = allocate_node();
+    tuple->init(thid_, std::move(body), node);
     MasstreeWrapper<Tuple>::insert_info_t insert_info{};
     const Status stat =
             Masstrees[get_storage(s)].insert_value(key, tuple, &insert_info);
     if (stat == Status::WARN_ALREADY_EXISTS) {
-        tuple->mutex_.unlock(thid_);
-        ;
+        tuple->mutex_.unlock(thid_, node);
+        deallocate_node(node);
         delete tuple;
         return stat;
     }
-    write_set_.emplace_back(s, key, tuple, OpType::INSERT);
+    write_set_.emplace_back(s, key, tuple, OpType::INSERT, node);
     if (insert_info.node) {
         if (!node_map_.empty()) {
             if (const auto it = node_map_.find((void*) insert_info.node);
                 it != node_map_.end()) {
                 if (unlikely(it->second != insert_info.old_version)) {
-                    tuple->mutex_.unlock(thid_);
-                    ;
+                    tuple->mutex_.unlock(thid_, node);
+                    deallocate_node(node);
                     status_ = TransactionStatus::aborted;
                     return Status::ERROR_CONCURRENT_WRITE_OR_DELETE;
                 }
@@ -179,7 +197,7 @@ Status TxExecutor::delete_record(Storage s, std::string_view key) {
     }
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
-    write_set_.emplace_back(s, key, tuple, OpType::DELETE);
+    write_set_.emplace_back(s, key, tuple, OpType::DELETE, nullptr);
     return Status::OK;
 }
 
@@ -190,34 +208,38 @@ void TxExecutor::lockWriteSet() {
         if (is_pcc_) {
             if (auto re = searchReadSetIterator(itr->storage_, itr->key_);
                 re != read_set_.end()) {
-                itr->rcdptr_->mutex_.upgrade(thid_);
+                itr->rcdptr_->mutex_.upgrade(thid_, re->node_);
                 read_set_.erase(re);
             } else {
-                itr->rcdptr_->mutex_.lock(thid_);
-                ;
+                const auto node = allocate_node();
+                itr->rcdptr_->mutex_.lock(thid_, node);
+                itr->node_ = node;
                 expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
                 if (expected.absent) {
-                    itr->rcdptr_->mutex_.unlock(thid_);
-                    ;
+                    itr->rcdptr_->mutex_.unlock(thid_, node);
+                    deallocate_node(node);
                     this->status_ = TransactionStatus::aborted;
                     if (itr != write_set_.begin()) unlockWriteSet(itr);
                     return;
                 }
             }
         } else {
-            if (!itr->rcdptr_->mutex_.try_lock(thid_)) {
+            const auto node = allocate_node();
+            if (!itr->rcdptr_->mutex_.try_lock(thid_, node)) {
+                deallocate_node(node);
                 this->status_ = TransactionStatus::aborted;
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
             expected.obj_ = loadRelaxed(itr->rcdptr_->tidword_.obj_);
             if (expected.absent) {
-                itr->rcdptr_->mutex_.unlock(thid_);
-                ;
+                itr->rcdptr_->mutex_.unlock(thid_, node);
+                deallocate_node(node);
                 this->status_ = TransactionStatus::aborted;
                 if (itr != write_set_.begin()) unlockWriteSet(itr);
                 return;
             }
+            itr->node_ = node;
         }
         max_wset_ = std::max(max_wset_, expected);
     }
@@ -323,15 +345,15 @@ void TxExecutor::writePhase() {
                 memcpy(itr.rcdptr_->body_.get_val_ptr(),
                        itr.body_.get_val_ptr(), itr.body_.get_val_size());
                 storeRelease(itr.rcdptr_->tidword_.obj_, max_tid_word.obj_);
-                itr.rcdptr_->mutex_.unlock(thid_);
-                ;
+                itr.rcdptr_->mutex_.unlock(thid_, itr.node_);
+                deallocate_node(itr.node_);
                 break;
             }
             case OpType::INSERT: {
                 max_tid_word.absent = false;
                 storeRelease(itr.rcdptr_->tidword_.obj_, max_tid_word.obj_);
-                itr.rcdptr_->mutex_.unlock(thid_);
-                ;
+                itr.rcdptr_->mutex_.unlock(thid_, itr.node_);
+                deallocate_node(itr.node_);
                 break;
             }
             case OpType::DELETE: {
@@ -339,8 +361,8 @@ void TxExecutor::writePhase() {
                 Masstrees[get_storage(itr.storage_)].remove_value(itr.key_);
                 storeRelease(itr.rcdptr_->tidword_.obj_, max_tid_word.obj_);
                 gc_records_.push_back(itr.rcdptr_);
-                itr.rcdptr_->mutex_.unlock(thid_);
-                ;
+                itr.rcdptr_->mutex_.unlock(thid_, itr.node_);
+                deallocate_node(itr.node_);
                 break;
             }
             default:
@@ -364,10 +386,12 @@ bool TxExecutor::commit() {
     return false;
 }
 
-void TxExecutor::unlockReadSet() const {
+void TxExecutor::unlockReadSet() {
     if (!is_pcc_) ERR;
-    for (const auto& re : read_set_) re.rcdptr_->mutex_.unlock(thid_);
-    ;
+    for (const auto& re : read_set_) {
+        re.rcdptr_->mutex_.unlock(thid_, re.node_);
+        deallocate_node(re.node_);
+    }
 }
 
 vector<ReadElement<Tuple>>::iterator
@@ -397,15 +421,18 @@ WriteElement<Tuple>* TxExecutor::searchWriteSet(Storage s,
 }
 
 void TxExecutor::unlockWriteSet() {
-    for (const auto& itr : write_set_) itr.rcdptr_->mutex_.unlock(thid_);
-    ;
+    for (const auto& itr : write_set_) {
+        itr.rcdptr_->mutex_.unlock(thid_, itr.node_);
+        deallocate_node(itr.node_);
+    }
 }
 
 void TxExecutor::unlockWriteSet(
         const std::vector<WriteElement<Tuple>>::iterator end) {
-    for (auto itr = write_set_.begin(); itr != end; ++itr)
-        itr->rcdptr_->mutex_.unlock(thid_);
-    ;
+    for (auto itr = write_set_.begin(); itr != end; ++itr) {
+        itr->rcdptr_->mutex_.unlock(thid_, itr->node_);
+        deallocate_node(itr->node_);
+    }
 }
 
 bool TxExecutor::isLeader() const { return this->thid_ == 0; }
@@ -445,4 +472,24 @@ void TxExecutor::hand_over_privilege() const {
     if (thid_ == privileges_.size() - 1) storeRelease(privileges_[0], 1);
     else
         storeRelease(privileges_[thid_ + 1], 1);
+}
+
+MCSMutex::MCSNode* TxExecutor::allocate_node() {
+    for (auto& [fst, snd] : lock_nodes_) {
+        if (!snd) {
+            snd = true;
+            return &fst;
+        }
+    }
+    throw std::runtime_error("Running out of MCS nodes");
+}
+
+void TxExecutor::deallocate_node(const MCSMutex::MCSNode* node) {
+    for (auto& [fst, snd] : lock_nodes_) {
+        if (node == &fst) {
+            snd = false;
+            return;
+        }
+    }
+    throw std::runtime_error("Invalid MCS node");
 }

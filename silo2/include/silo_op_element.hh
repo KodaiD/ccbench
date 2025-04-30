@@ -9,17 +9,19 @@ class ReadElement : public OpElement<T> {
 public:
     using OpElement<T>::OpElement;
     TupleBody body_;
+    MCSMutex::MCSNode* node_ = nullptr;
 
     ReadElement(Storage s, std::string_view key, T* rcdptr, char* val,
-                Tidword tidword)
-        : OpElement<T>::OpElement(s, key, rcdptr) {
+                Tidword tidword, MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcdptr), node_(node) {
         tidword_.obj_ = tidword.obj_;
         memcpy(this->val_, val, VAL_SIZE);
     }
 
     ReadElement(Storage s, std::string_view key, T* rcdptr, TupleBody&& body,
-                Tidword tidword)
-        : OpElement<T>::OpElement(s, key, rcdptr), body_(std::move(body)) {
+                Tidword tidword, MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcdptr), body_(std::move(body)),
+          node_(node), val_{} {
         tidword_.obj_ = tidword.obj_;
     }
 
@@ -41,10 +43,11 @@ class WriteElement : public OpElement<T> {
 public:
     using OpElement<T>::OpElement;
     TupleBody body_;
+    MCSMutex::MCSNode* node_ = nullptr;
 
     WriteElement(Storage s, std::string_view key, T* rcdptr,
-                 std::string_view val, OpType op)
-        : OpElement<T>::OpElement(s, key, rcdptr, op) {
+                 std::string_view val, OpType op, MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcdptr, op), node_(node) {
         static_assert(std::string_view("").size() == 0,
                       "Expected behavior was broken.");
         if (val.size() != 0) {
@@ -57,12 +60,14 @@ public:
         // else : fast approach for benchmark
     }
 
-    WriteElement(Storage s, std::string_view key, T* rcdptr, OpType op)
-        : OpElement<T>::OpElement(s, key, rcdptr, op) {}
+    WriteElement(Storage s, std::string_view key, T* rcdptr, OpType op,
+                 MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcdptr, op), node_(node) {}
 
     WriteElement(Storage s, std::string_view key, T* rcdptr, TupleBody&& body,
-                 OpType op)
-        : OpElement<T>::OpElement(s, key, rcdptr, op), body_(std::move(body)) {}
+                 OpType op, MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcdptr, op), body_(std::move(body)),
+          node_(node) {}
 
     bool operator<(const WriteElement& right) const {
         if (this->storage_ != right.storage_)

@@ -19,6 +19,7 @@
 #include "tuple.hh"
 
 #define LOGSET_SIZE 1000
+#define NODE_POOL_SIZE 2000
 
 enum class TransactionStatus : uint8_t {
     invalid,
@@ -38,6 +39,7 @@ public:
     std::deque<Tuple*> gc_records_;
     std::unordered_map<void*, uint64_t> node_map_;
     std::vector<LogRecord> log_set_;
+    std::array<std::pair<MCSMutex::MCSNode, bool>, NODE_POOL_SIZE> lock_nodes_;
 
     // Utility
     LogHeader latest_log_header_;
@@ -61,14 +63,7 @@ public:
     std::vector<uint64_t>& privileges_;
 
     TxExecutor(int thid, Result* res, const bool& quit,
-               std::vector<uint64_t>& privileges)
-        : result_(res), thid_(thid), quit_(quit), backoff_(FLAGS_clocks_per_us),
-          callback_(TxScanCallback(this)), status_(), privileges_(privileges) {
-        max_rset_.obj_ = 0;
-        max_wset_.obj_ = 0;
-        epoch_timer_start = rdtsc();
-        epoch_timer_stop = 0;
-    }
+               std::vector<uint64_t>& privileges);
 
     void abort();
 
@@ -98,7 +93,7 @@ public:
                 std::string_view right_key, bool r_exclusive,
                 std::vector<TupleBody*>& result, int64_t limit);
 
-    void unlockReadSet() const;
+    void unlockReadSet();
 
     vector<ReadElement<Tuple>>::iterator
     searchReadSetIterator(Storage s, std::string_view key);
@@ -134,4 +129,8 @@ public:
     bool has_privilege() const;
 
     void hand_over_privilege() const;
+
+    MCSMutex::MCSNode* allocate_node();
+
+    void deallocate_node(const MCSMutex::MCSNode* node);
 };

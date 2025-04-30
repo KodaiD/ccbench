@@ -6,12 +6,13 @@ class MCSMutex {
 public:
     MCSMutex() : tail_(nullptr) {}
 
-    bool try_lock(const size_t id) {
-        MCSNode* my_node_ = &nodes_[id];
+    struct MCSNode;
+
+    bool try_lock(const size_t id, MCSNode* my_node) {
         auto tail = tail_.load(std::memory_order_acquire);
         while (true) {
             if (tail != nullptr) break;
-            if (tail_.compare_exchange_weak(tail, my_node_,
+            if (tail_.compare_exchange_weak(tail, my_node,
                                             std::memory_order_acquire,
                                             std::memory_order_relaxed))
                 return true;
@@ -19,47 +20,43 @@ public:
         return false;
     }
 
-    void lock(const size_t id) {
-        MCSNode* my_node_ = &nodes_[id];
-        if (MCSNode* prev = tail_.exchange(my_node_, std::memory_order_acquire);
+    void lock(const size_t id, MCSNode* my_node) {
+        if (MCSNode* prev = tail_.exchange(my_node, std::memory_order_acquire);
             prev != nullptr) {
-            my_node_->locked = true;
-            prev->next.store(my_node_, std::memory_order_release);
-            while (my_node_->locked.load(std::memory_order_acquire)) {}
+            my_node->locked = true;
+            prev->next.store(my_node, std::memory_order_release);
+            while (my_node->locked.load(std::memory_order_acquire)) {}
         }
     }
 
-    void read_lock(const size_t id) {
-        MCSNode* my_node_ = &nodes_[id];
-        my_node_->is_read.store(true);
-        if (MCSNode* prev = tail_.exchange(my_node_, std::memory_order_acquire);
+    void read_lock(const size_t id, MCSNode* my_node) {
+        my_node->is_read.store(true);
+        if (MCSNode* prev = tail_.exchange(my_node, std::memory_order_acquire);
             prev != nullptr) {
-            my_node_->locked = true;
-            prev->next.store(my_node_, std::memory_order_release);
-            while (my_node_->locked.load(std::memory_order_acquire)) {}
+            my_node->locked = true;
+            prev->next.store(my_node, std::memory_order_release);
+            while (my_node->locked.load(std::memory_order_acquire)) {}
         }
     }
 
     // Because normal tx does not wait for read lock, tail_ is always me
-    void upgrade(const size_t id) {
-        MCSNode* my_node_ = &nodes_[id];
-        my_node_->is_read.store(false, std::memory_order_release);
+    void upgrade(const size_t id, MCSNode* my_node) {
+        my_node->is_read.store(false, std::memory_order_release);
     }
 
-    void unlock(const size_t id) {
-        MCSNode* my_node_ = &nodes_[id];
-        MCSNode* next = my_node_->next;
+    void unlock(const size_t id, MCSNode* my_node) {
+        MCSNode* next = my_node->next;
         if (next == nullptr) {
-            if (MCSNode* expected = my_node_; tail_.compare_exchange_strong(
+            if (MCSNode* expected = my_node; tail_.compare_exchange_strong(
                         expected, nullptr, std::memory_order_release,
                         std::memory_order_relaxed)) {
-                my_node_->reset();
+                my_node->reset();
                 return;
             }
-            while ((next = my_node_->next) == nullptr) {}
+            while ((next = my_node->next) == nullptr) {}
         }
         next->locked.store(false, std::memory_order_release);
-        my_node_->reset();
+        my_node->reset();
     }
 
     [[nodiscard]] bool is_locked() const {
@@ -68,13 +65,12 @@ public:
         return !tail->is_read.load(std::memory_order_acquire);
     }
 
-private:
     struct MCSNode {
         std::atomic<bool> locked;
         std::atomic<MCSNode*> next;
         std::atomic<bool> is_read;
 
-        MCSNode() : locked(false), next(nullptr), is_read(false) {}
+        MCSNode() = default;
 
         void reset() {
             locked.store(false);
@@ -83,6 +79,6 @@ private:
         }
     };
 
+private:
     std::atomic<MCSNode*> tail_;
-    std::array<MCSNode, 128> nodes_;
 };

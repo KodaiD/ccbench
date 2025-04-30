@@ -47,9 +47,9 @@ public:
         body_ = std::move(body);
     }
 
-    void init(const size_t thid, TupleBody&& body) {
+    void init(const size_t thid, TupleBody&& body, MCSMutex::MCSNode* node) {
         tidword_.absent = true;
-        mutex_.lock(thid);
+        mutex_.lock(thid, node);
         body_ = std::move(body);
     }
 };
