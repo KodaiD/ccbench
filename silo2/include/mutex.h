@@ -8,7 +8,7 @@ public:
 
     struct MCSNode;
 
-    bool try_lock(const size_t id, MCSNode* my_node) {
+    bool try_lock(MCSNode* my_node) {
         auto tail = tail_.load(std::memory_order_acquire);
         while (true) {
             if (tail != nullptr) break;
@@ -20,7 +20,7 @@ public:
         return false;
     }
 
-    void lock(const size_t id, MCSNode* my_node) {
+    void lock(MCSNode* my_node) {
         if (MCSNode* prev = tail_.exchange(my_node, std::memory_order_acquire);
             prev != nullptr) {
             my_node->locked = true;
@@ -29,7 +29,7 @@ public:
         }
     }
 
-    void read_lock(const size_t id, MCSNode* my_node) {
+    void read_lock(MCSNode* my_node) {
         my_node->is_read.store(true);
         if (MCSNode* prev = tail_.exchange(my_node, std::memory_order_acquire);
             prev != nullptr) {
@@ -40,11 +40,11 @@ public:
     }
 
     // Because normal tx does not wait for read lock, tail_ is always me
-    void upgrade(const size_t id, MCSNode* my_node) {
+    void upgrade(MCSNode* my_node) {
         my_node->is_read.store(false, std::memory_order_release);
     }
 
-    void unlock(const size_t id, MCSNode* my_node) {
+    void unlock(MCSNode* my_node) {
         MCSNode* next = my_node->next;
         if (next == nullptr) {
             if (MCSNode* expected = my_node; tail_.compare_exchange_strong(

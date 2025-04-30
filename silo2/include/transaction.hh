@@ -133,6 +133,4 @@ public:
     void hand_over_privilege() const;
 
     MCSMutex::MCSNode* allocate_node();
-
-    void deallocate_node(MCSMutex::MCSNode* node);
 };
