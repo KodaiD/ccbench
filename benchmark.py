@@ -25,16 +25,16 @@ def main():
     silo2_threshold = polaris_t + polaris_s
 
     # protocols = ["silo", "silo2", "polaris"]
-    # threads = [1, 32, 64]
+    # threads = [1, 16, 32, 48, 64]
     # read_rates = [50]
     # num_recs = [1000000]
     # num_ops = 10
-    # num_sec = 5
+    # num_sec = 30
     # skews = [0.99]
     # no_wait = [1]
     # polaris_t = 16
     # polaris_s = 4
-    # silo2_threshold = polaris_t + polaris_s
+    # silo2_threshold = 1
 
     for protocol in protocols:
         for rratio in read_rates:
@@ -58,6 +58,8 @@ def main():
                         for thread in threads:
 
                             print_latencies = 0
+                            if thread == 64:
+                                print_latencies = 1
 
                             if protocol == "silo" or protocol == "silo2" or protocol == "polaris":
                                 cmd = [f"./build/{protocol}/ycsb_{protocol}.exe", f"--ycsb-rratio={rratio}",
