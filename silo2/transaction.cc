@@ -69,6 +69,7 @@ void TxExecutor::begin() {
     } else {
         is_pcc_ = false;
     }
+    next_free_node = 0;
 }
 
 Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
