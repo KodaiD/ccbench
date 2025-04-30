@@ -40,7 +40,6 @@ public:
     std::unordered_map<void*, uint64_t> node_map_;
     std::vector<LogRecord> log_set_;
     std::array<MCSMutex::MCSNode, NODE_POOL_SIZE> lock_nodes_{};
-    std::unordered_map<MCSMutex::MCSNode*, bool> lock_nodes_map_;
     size_t next_free_node = 0;
 
     // Utility

@@ -20,10 +20,7 @@ TxExecutor::TxExecutor(int thid, Result* res, const bool& quit,
     max_wset_.obj_ = 0;
     epoch_timer_start = rdtsc();
     epoch_timer_stop = 0;
-    for (auto& lock_node : lock_nodes_) {
-        lock_node.reset();
-        lock_nodes_map_[&lock_node] = false;
-    }
+    for (auto& lock_node : lock_nodes_) { lock_node.reset(); }
 }
 
 void TxExecutor::gc_records() {
