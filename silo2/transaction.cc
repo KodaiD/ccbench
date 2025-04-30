@@ -189,7 +189,12 @@ Status TxExecutor::delete_record(Storage s, std::string_view key) {
     }
     for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
         if (itr->storage_ != s) continue;
-        if (itr->key_ == key) write_set_.erase(itr);
+        if (itr->key_ == key) {
+            if (itr->op_ == OpType::INSERT) {
+                itr->rcdptr_->mutex_.unlock(itr->node_);
+                write_set_.erase(itr);
+            }
+        }
     }
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
