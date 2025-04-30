@@ -19,7 +19,7 @@
 #include "tuple.hh"
 
 #define LOGSET_SIZE 1000
-#define NODE_POOL_SIZE 2000
+#define NODE_POOL_SIZE 1000
 
 enum class TransactionStatus : uint8_t {
     invalid,
@@ -39,7 +39,9 @@ public:
     std::deque<Tuple*> gc_records_;
     std::unordered_map<void*, uint64_t> node_map_;
     std::vector<LogRecord> log_set_;
-    std::array<std::pair<MCSMutex::MCSNode, bool>, NODE_POOL_SIZE> lock_nodes_;
+    std::array<MCSMutex::MCSNode, NODE_POOL_SIZE> lock_nodes_{};
+    std::unordered_map<MCSMutex::MCSNode*, bool> lock_nodes_map_;
+    size_t next_free_node = 0;
 
     // Utility
     LogHeader latest_log_header_;
@@ -132,5 +134,5 @@ public:
 
     MCSMutex::MCSNode* allocate_node();
 
-    void deallocate_node(const MCSMutex::MCSNode* node);
+    void deallocate_node(MCSMutex::MCSNode* node);
 };

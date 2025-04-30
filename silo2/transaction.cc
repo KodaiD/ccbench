@@ -20,9 +20,9 @@ TxExecutor::TxExecutor(int thid, Result* res, const bool& quit,
     max_wset_.obj_ = 0;
     epoch_timer_start = rdtsc();
     epoch_timer_stop = 0;
-    for (auto& [fst, snd] : lock_nodes_) {
-        fst.reset();
-        snd = false;
+    for (auto& lock_node : lock_nodes_) {
+        lock_node.reset();
+        lock_nodes_map_[&lock_node] = false;
     }
 }
 
@@ -475,21 +475,15 @@ void TxExecutor::hand_over_privilege() const {
 }
 
 MCSMutex::MCSNode* TxExecutor::allocate_node() {
-    for (auto& [fst, snd] : lock_nodes_) {
-        if (!snd) {
-            snd = true;
-            return &fst;
-        }
+    while (lock_nodes_map_[&lock_nodes_[next_free_node]]) {
+        if (++next_free_node == lock_nodes_.size()) next_free_node = 0;
     }
-    throw std::runtime_error("Running out of MCS nodes");
+    lock_nodes_map_[&lock_nodes_[next_free_node]] = true;
+    const auto node = &lock_nodes_[next_free_node];
+    if (++next_free_node == lock_nodes_.size()) next_free_node = 0;
+    return node;
 }
 
-void TxExecutor::deallocate_node(const MCSMutex::MCSNode* node) {
-    for (auto& [fst, snd] : lock_nodes_) {
-        if (node == &fst) {
-            snd = false;
-            return;
-        }
-    }
-    throw std::runtime_error("Invalid MCS node");
+void TxExecutor::deallocate_node(MCSMutex::MCSNode* node) {
+    lock_nodes_map_[node] = false;
 }
