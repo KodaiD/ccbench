@@ -37,7 +37,6 @@ void TxExecutor::abort() {
     if (is_pcc_) unlockReadSet();
     for (auto& we : write_set_) {
         if (we.op_ == OpType::INSERT) {
-            we.rcdptr_->mutex_.unlock(we.node_);
             Masstrees[get_storage(we.storage_)].remove_value(we.key_);
             delete we.rcdptr_;
         }
