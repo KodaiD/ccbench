@@ -46,7 +46,6 @@ public:
     bool super_ = false;
     uint64_t abort_cnt_ = 0;
     uint64_t t_ = 0;
-    uint32_t ts_ = thid_;
 
     TxExecutor(const int thid, Result* res, const bool& quit)
         : status_(), thid_(thid), result_(res), backoff_(FLAGS_clocks_per_us),
@@ -112,4 +111,12 @@ public:
     bool less_than(const Tidword& tid_word) const;
 
     void prepare_abort();
+
+    bool wound_or_die(Tuple* tuple, Tidword expected, uint8_t mode);
+
+    bool try_lock(Tuple* tuple, Tidword& expected, uint8_t mode) const;
+
+    static bool validate(Tuple* tuple, Tidword& expected);
+
+    void unlock(Tuple* tuple) const;
 };

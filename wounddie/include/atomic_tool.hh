@@ -29,14 +29,12 @@ INLINE void atomicStoreThLocalEpoch(const unsigned int thid,
     __atomic_store_n(&(ThLocalEpoch[thid].obj_), new_val, __ATOMIC_RELEASE);
 }
 
-INLINE uint64_t atomicLoadThLocalTS(const unsigned int thid) {
-    const uint64_t_64byte result =
-            __atomic_load_n(&(ThLocalTS[thid].obj_), __ATOMIC_ACQUIRE);
-    return result.obj_;
+INLINE void atomicStoreThLocalTS(const unsigned int thid,
+                                 const uint64_t new_val) {
+    __atomic_store_n(&(ThLocalTS[thid].obj_), new_val, __ATOMIC_RELEASE);
 }
 
-INLINE uint64_t atomicLoadThLocalStatus(const unsigned int thid) {
-    const uint64_t_64byte result =
-            __atomic_load_n(&(ThLocalStatus[thid].obj_), __ATOMIC_ACQUIRE);
-    return result.obj_;
+INLINE void atomicStoreThLocalStatus(const unsigned int thid,
+                                     const uint64_t new_val) {
+    __atomic_store_n(&(ThLocalStatus[thid].obj_), new_val, __ATOMIC_RELEASE);
 }

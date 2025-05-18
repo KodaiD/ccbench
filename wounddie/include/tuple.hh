@@ -14,9 +14,10 @@ struct Tidword {
         struct {
             uint8_t lock : 2;
             uint32_t thid : 16;
+            bool reserved : 1;
             bool latest : 1;
             bool absent : 1;
-            uint64_t tid : 12;
+            uint64_t tid : 11;
             uint64_t epoch : 32;
         };
     };
@@ -42,14 +43,19 @@ public:
     void init([[maybe_unused]] size_t thid, TupleBody&& body,
               [[maybe_unused]] void* p) {
         tidword_.epoch = 1;
+        tidword_.tid = 0;
         tidword_.latest = true;
         tidword_.absent = false;
+        tidword_.reserved = false;
+        tidword_.thid = UINT16_MAX;
         tidword_.lock = UNLOCKED;
         body_ = std::move(body);
     }
 
     void init(TupleBody&& body, const uint8_t lock_mode) {
         tidword_.absent = true;
+        tidword_.reserved = false;
+        tidword_.thid = UINT16_MAX;
         tidword_.lock = lock_mode;
         body_ = std::move(body);
     }
