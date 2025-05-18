@@ -1,0 +1,18 @@
+#pragma once
+
+extern void chkArg();
+
+extern bool chkEpochLoaded();
+
+extern void displayParameter();
+
+extern void siloLeaderWork(uint64_t& epoch_timer_start,
+                           uint64_t& epoch_timer_stop);
+
+extern void ShowOptParameters();
+
+class DefaultInitializer {
+public:
+    DefaultInitializer() = default;
+    void makeDB();
+};
