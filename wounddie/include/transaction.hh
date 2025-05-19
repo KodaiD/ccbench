@@ -119,7 +119,7 @@ public:
 
     void prepare_abort();
 
-    RC wound_or_die(Tuple* tuple, Tidword expected, uint8_t mode);
+    RC wound_or_die(Tuple* tuple, Tidword& expected, uint8_t mode);
 
     bool try_lock(Tuple* tuple, Tidword& expected, uint8_t mode) const;
 

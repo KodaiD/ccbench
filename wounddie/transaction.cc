@@ -645,7 +645,7 @@ INLINE void TxExecutor::prepare_abort() {
     unlockWriteSet();
 }
 
-INLINE RC TxExecutor::wound_or_die(Tuple* tuple, Tidword expected,
+INLINE RC TxExecutor::wound_or_die(Tuple* tuple, Tidword& expected,
                                    const uint8_t mode) {
     if (less_than(expected)) { // Wound & Lock
         Tidword desired = expected;
