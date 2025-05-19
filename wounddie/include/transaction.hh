@@ -21,6 +21,12 @@ enum class TransactionStatus : uint8_t {
     aborted,
 };
 
+enum class RC : uint8_t {
+    WOUND,
+    DIE,
+    RETRY,
+};
+
 class TxScanCallback;
 
 class TxExecutor {
@@ -54,6 +60,7 @@ public:
         max_wset_.obj_ = 0;
         epoch_timer_start = rdtsc();
         epoch_timer_stop = 0;
+        ThLocalTS[thid].obj_ = thid;
     }
 
     void abort();
@@ -112,7 +119,7 @@ public:
 
     void prepare_abort();
 
-    bool wound_or_die(Tuple* tuple, Tidword expected, uint8_t mode);
+    RC wound_or_die(Tuple* tuple, Tidword expected, uint8_t mode);
 
     bool try_lock(Tuple* tuple, Tidword& expected, uint8_t mode) const;
 

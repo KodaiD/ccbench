@@ -41,8 +41,8 @@ void chkArg() {
         ERR;
     for (unsigned int i = 0; i < TotalThreadNum; ++i) {
         ThLocalEpoch[i].obj_ = 0;
-        ThLocalTS[i].obj_ = 0;
-        ThLocalStatus[i].obj_ = 0;
+        ThLocalTS[i].obj_ = i;
+        ThLocalStatus[i].obj_ = STATUS_ACTIVE;
         CTIDW[i].obj_ = 0;
     }
 }
