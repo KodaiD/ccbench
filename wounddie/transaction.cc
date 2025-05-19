@@ -108,6 +108,7 @@ Status TxExecutor::delete_record(Storage s, std::string_view key) {
                 if (try_lock(tuple, expected, SUPER_EXLOCKED)) { break; }
                 if (expected.absent) {
                     prepare_abort();
+                    storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
                     return Status::WARN_NOT_FOUND;
                 }
             } else if (expected.lock == SUPER_SHLOCKED ||
@@ -203,6 +204,7 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
                 if (try_lock(tuple, expected, SUPER_SHLOCKED)) { break; }
                 if (expected.absent) {
                     prepare_abort();
+                    storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
                     return Status::WARN_NOT_FOUND;
                 }
             } else if (expected.lock == SUPER_SHLOCKED) {
@@ -360,19 +362,31 @@ void TxExecutor::unlockReadSet() const {
 
 bool TxExecutor::validationPhase() {
     if (super_) {
-        auto status = loadAcquire(ThLocalStatus[thid_].obj_);
-        if (status == STATUS_ABORTED) {
-            this->status_ = TransactionStatus::aborted;
-            unlockReadSet();
-            unlockWriteSet();
+        if (auto status = loadAcquire(ThLocalStatus[thid_].obj_);
+            status == STATUS_ABORTED) {
+            prepare_abort();
             return false;
         }
-        if (!compareExchange(ThLocalStatus[thid_].obj_, status,
-                             STATUS_COMMITTING)) {
-            status_ = TransactionStatus::aborted;
-            unlockReadSet();
-            unlockWriteSet();
-            return false;
+        for (auto& we : write_set_) {
+            Tidword expected;
+            expected.obj_ = loadAcquire(we.rcdptr_->tidword_.obj_);
+            while (true) {
+                if (expected.thid != thid_) {
+                    prepare_abort();
+                    storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
+                    return false;
+                }
+                Tidword desired;
+                desired = expected;
+                desired.lock = EXLOCKED;
+                if (compareExchange(we.rcdptr_->tidword_.obj_, expected.obj_,
+                                    desired.obj_)) {
+                    if (we.op_ != OpType::INSERT) {
+                        max_wset_ = std::max(max_wset_, expected);
+                    }
+                    break;
+                }
+            }
         }
     } else {
         sort(write_set_.begin(), write_set_.end());
@@ -443,6 +457,7 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
                         expected.tid != re->get_tidword().tid ||
                         expected.epoch != re->get_tidword().epoch) {
                         prepare_abort();
+                        storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
                         return Status::WARN_NOT_FOUND;
                     }
                     if (try_lock(re->rcdptr_, expected, SUPER_SHLOCKED)) {
@@ -461,6 +476,7 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
                     if (expected.tid != re->get_tidword().tid ||
                         expected.epoch != re->get_tidword().epoch) { // Validate
                         prepare_abort();
+                        storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
                         return Status::ERROR_CONCURRENT_WRITE_OR_DELETE;
                     }
                     if (const auto rc = wound_or_die(re->rcdptr_, expected,
@@ -489,6 +505,7 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
                 if (try_lock(tuple, expected, SUPER_EXLOCKED)) { break; }
                 if (expected.absent) {
                     prepare_abort();
+                    storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
                     return Status::WARN_NOT_FOUND;
                 }
             } else if (expected.lock == SUPER_SHLOCKED ||
@@ -602,13 +619,12 @@ void TxScanCallback::on_resp_node(const MasstreeWrapper<Tuple>::node_type* n,
     }
 }
 
-INLINE bool TxExecutor::wound(const uint16_t thid) {
+INLINE void TxExecutor::notify(const uint16_t thid) {
     auto status = loadAcquire(ThLocalStatus[thid].obj_);
     while (true) {
-        if (status == STATUS_COMMITTING) { return false; }
-        if (status == STATUS_ABORTED) { return true; }
+        if (status == STATUS_ABORTED) { return; }
         if (compareExchange(ThLocalStatus[thid].obj_, status, STATUS_ABORTED)) {
-            return true;
+            return;
         }
     }
 }
@@ -625,7 +641,6 @@ INLINE bool TxExecutor::less_than(const Tidword& tid_word) const {
 
 INLINE void TxExecutor::prepare_abort() {
     this->status_ = TransactionStatus::aborted;
-    storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
     unlockReadSet();
     unlockWriteSet();
 }
@@ -635,49 +650,26 @@ INLINE RC TxExecutor::wound_or_die(Tuple* tuple, Tidword expected,
     if (less_than(expected)) { // Wound & Lock
         Tidword desired = expected;
         desired.thid = thid_;
-        desired.reserved = true;
+        desired.lock = mode;
         if (compareExchange(tuple->tidword_.obj_, expected.obj_,
                             desired.obj_)) { // Reserve
-            wound(expected.thid);
-            expected.obj_ = loadAcquire(tuple->tidword_.obj_);
-            while (true) {
-                if (expected.thid != thid_) { // My reservation is overwritten
-                    prepare_abort();
-                    return RC::DIE;
-                }
-                if (expected.lock != UNLOCKED) { // Not unlocked yet
-                    expected.obj_ = loadAcquire(tuple->tidword_.obj_);
-                    continue;
-                }
-                desired = expected;
-                desired.lock = mode;
-                desired.reserved = false;
-                if (compareExchange(tuple->tidword_.obj_, expected.obj_,
-                                    desired.obj_)) { // Lock
-                    return RC::WOUND;
-                }
-            }
+            notify(expected.thid);
+            return RC::WOUND;
         }
         return RC::RETRY;
     }
     // Die
     prepare_abort();
+    storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
     return RC::DIE;
 }
 
 INLINE bool TxExecutor::try_lock(Tuple* tuple, Tidword& expected,
                                  const uint8_t mode) const {
-    if (expected.reserved && expected.thid != UINT16_MAX) {
-        if (!less_than(expected)) {
-            expected.obj_ = loadAcquire(tuple->tidword_.obj_);
-            return false;
-        }
-    }
     if (expected.absent) { return false; }
     Tidword desired = expected;
     desired.lock = mode;
     desired.thid = thid_;
-    desired.reserved = false;
     if (compareExchange(tuple->tidword_.obj_, expected.obj_, desired.obj_)) {
         return true;
     }
@@ -700,12 +692,17 @@ INLINE void TxExecutor::unlock(Tuple* tuple) const {
     Tidword expected;
     expected.obj_ = loadAcquire(tuple->tidword_.obj_);
     while (true) {
-        Tidword desired = expected;
-        desired.lock = UNLOCKED;
-        if (expected.thid == thid_) { desired.thid = UINT16_MAX; }
-        if (!expected.reserved) { // Read owner is changed
+        if (expected.thid != thid_) break;
+        if (expected.lock == EXLOCKED) {
+            Tidword desired = expected;
+            desired.thid = UINT16_MAX;
+            desired.lock = UNLOCKED;
+            storeRelease(tuple->tidword_.obj_, desired.obj_);
             return;
         }
+        Tidword desired = expected;
+        desired.lock = UNLOCKED;
+        desired.thid = UINT16_MAX;
         if (compareExchange(tuple->tidword_.obj_, expected.obj_,
                             desired.obj_)) {
             break;

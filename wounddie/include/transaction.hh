@@ -113,7 +113,7 @@ public:
 
     void gc_records();
 
-    static bool wound(uint16_t thid);
+    static void notify(uint16_t thid);
 
     bool less_than(const Tidword& tid_word) const;
 

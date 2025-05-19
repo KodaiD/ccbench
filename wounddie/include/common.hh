@@ -20,8 +20,7 @@ alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte GlobalEpoch(1);
 alignas(CACHE_LINE_SIZE) GLOBAL MasstreeWrapper<Tuple> MT;
 #endif
 uint64_t GLOBAL STATUS_ACTIVE = 0;
-uint64_t GLOBAL STATUS_COMMITTING = 1;
-uint64_t GLOBAL STATUS_ABORTED = 2;
+uint64_t GLOBAL STATUS_ABORTED = 1;
 #else
 #define GLOBAL extern
 alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte GlobalEpoch;
@@ -29,7 +28,6 @@ alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte GlobalEpoch;
 alignas(CACHE_LINE_SIZE) GLOBAL MasstreeWrapper<Tuple> MT;
 #endif
 uint64_t GLOBAL STATUS_ACTIVE;
-uint64_t GLOBAL STATUS_COMMITTING;
 uint64_t GLOBAL STATUS_ABORTED;
 #endif
 
