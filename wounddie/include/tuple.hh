@@ -50,9 +50,9 @@ public:
         body_ = std::move(body);
     }
 
-    void init(TupleBody&& body, const uint8_t lock_mode) {
+    void init(TupleBody&& body, const uint8_t lock_mode, const uint16_t thid) {
         tidword_.absent = true;
-        tidword_.thid = UINT16_MAX;
+        tidword_.thid = thid;
         tidword_.lock = lock_mode;
         body_ = std::move(body);
     }

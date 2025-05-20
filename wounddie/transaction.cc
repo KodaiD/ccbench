@@ -61,7 +61,7 @@ void TxExecutor::begin() {
 }
 
 Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
-    if (loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
+    if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
         prepare_abort();
         return Status::ERROR_LOCK_FAILED;
     }
@@ -70,9 +70,9 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     if (tuple != nullptr) { return Status::WARN_ALREADY_EXISTS; }
     tuple = new Tuple();
     if (super_) {
-        tuple->init(std::move(body), SUPER_EXLOCKED);
+        tuple->init(std::move(body), SUPER_EXLOCKED, thid_);
     } else {
-        tuple->init(std::move(body), EXLOCKED);
+        tuple->init(std::move(body), EXLOCKED, thid_);
     }
     MasstreeWrapper<Tuple>::insert_info_t insert_info{};
     const Status stat =
@@ -87,6 +87,7 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
                 it != node_map_.end()) {
                 if (unlikely(it->second != insert_info.old_version)) {
                     status_ = TransactionStatus::aborted;
+                    if (super_) { prepare_abort(); }
                     return Status::ERROR_CONCURRENT_WRITE_OR_DELETE;
                 }
                 it->second = insert_info.new_version;
@@ -100,7 +101,7 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
 }
 
 Status TxExecutor::delete_record(Storage s, std::string_view key) {
-    if (loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
+    if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
         prepare_abort();
         return Status::ERROR_LOCK_FAILED;
     }
@@ -141,6 +142,7 @@ void TxExecutor::lockWriteSet() {
             } else {
                 Tidword desired = expected;
                 desired.lock = EXLOCKED;
+                desired.thid = thid_;
                 if (compareExchange(itr->rcdptr_->tidword_.obj_, expected.obj_,
                                     desired.obj_)) {
                     break;
@@ -161,7 +163,7 @@ void TxExecutor::lockWriteSet() {
 
 Status TxExecutor::read(const Storage s, const std::string_view key,
                         TupleBody** body) {
-    if (loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
+    if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
         prepare_abort();
         return Status::ERROR_LOCK_FAILED;
     }
@@ -240,7 +242,7 @@ Status TxExecutor::scan(const Storage s, const std::string_view left_key,
                         const std::string_view right_key,
                         const bool r_exclusive, std::vector<TupleBody*>& result,
                         const int64_t limit) {
-    if (loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
+    if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
         prepare_abort();
         return Status::ERROR_LOCK_FAILED;
     }
@@ -262,6 +264,8 @@ Status TxExecutor::scan(const Storage s, const std::string_view left_key,
         }
         if (const Status stat = read_internal(s, itr->body_.get_key(), itr);
             stat != Status::OK && stat != Status::WARN_NOT_FOUND) {
+            prepare_abort();
+            storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
             return stat;
         }
     }
@@ -459,6 +463,7 @@ void TxExecutor::writePhase() {
     for (auto& itr : write_set_) {
         switch (itr.op_) {
             case OpType::UPDATE: {
+                max_tid.absent = false;
                 memcpy(itr.rcdptr_->body_.get_val_ptr(),
                        itr.body_.get_val_ptr(), itr.body_.get_val_size());
                 storeRelease(itr.rcdptr_->tidword_.obj_, max_tid.obj_);
@@ -575,11 +580,7 @@ INLINE RC TxExecutor::try_read_lock(Tuple* tuple, Tidword& expected) {
             if (try_lock_when_unlocked(tuple, expected, SUPER_SHLOCKED)) {
                 return RC::SUCCESS;
             }
-            if (expected.absent) {
-                prepare_abort();
-                storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
-                return RC::NOT_FOUND;
-            }
+            if (expected.absent) { return RC::NOT_FOUND; }
         } else if (expected.lock == SUPER_SHLOCKED) {
             if (less_than(expected)) { // Overwrite thid
                 Tidword desired = expected;
@@ -614,11 +615,7 @@ INLINE RC TxExecutor::try_write_lock(Tuple* tuple) {
             if (try_lock_when_unlocked(tuple, expected, SUPER_EXLOCKED)) {
                 return RC::SUCCESS;
             }
-            if (expected.absent) {
-                prepare_abort();
-                storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
-                return RC::NOT_FOUND;
-            }
+            if (expected.absent) { return RC::NOT_FOUND; }
         } else if (expected.lock == SUPER_SHLOCKED ||
                    expected.lock == SUPER_EXLOCKED) {
             if (const auto rc = wound_or_die(tuple, expected, SUPER_EXLOCKED);
@@ -639,11 +636,12 @@ INLINE RC TxExecutor::try_upgrade(Tuple* tuple, const Tidword& old_tidw) {
     expected.obj_ = loadAcquire(tuple->tidword_.obj_);
     while (true) {
         if (expected.lock == UNLOCKED) {
-            if (expected.absent || expected.tid != old_tidw.tid ||
+            if (expected.absent) { return RC::NOT_FOUND; }
+            if (expected.tid != old_tidw.tid ||
                 expected.epoch != old_tidw.epoch) {
                 prepare_abort();
                 storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
-                return RC::NOT_FOUND;
+                return RC::DIE;
             }
             if (try_lock_when_unlocked(tuple, expected, SUPER_SHLOCKED)) {
                 return RC::SUCCESS;
