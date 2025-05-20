@@ -22,9 +22,12 @@ enum class TransactionStatus : uint8_t {
 };
 
 enum class RC : uint8_t {
+    SUCCESS,
     WOUND,
     DIE,
     RETRY,
+    NOT_FOUND,
+    ALREADY_READ_LOCKED,
 };
 
 class TxScanCallback;
@@ -53,15 +56,7 @@ public:
     uint64_t abort_cnt_ = 0;
     uint64_t t_ = 0;
 
-    TxExecutor(const int thid, Result* res, const bool& quit)
-        : status_(), thid_(thid), result_(res), backoff_(FLAGS_clocks_per_us),
-          quit_(quit), callback_(TxScanCallback(this)) {
-        max_rset_.obj_ = 0;
-        max_wset_.obj_ = 0;
-        epoch_timer_start = rdtsc();
-        epoch_timer_stop = 0;
-        ThLocalTS[thid].obj_ = thid;
-    }
+    TxExecutor(int thid, Result* res, const bool& quit);
 
     void abort();
 
@@ -121,7 +116,14 @@ public:
 
     RC wound_or_die(Tuple* tuple, Tidword& expected, uint8_t mode);
 
-    bool try_lock(Tuple* tuple, Tidword& expected, uint8_t mode) const;
+    RC try_read_lock(Tuple* tuple, Tidword& expected);
+
+    RC try_write_lock(Tuple* tuple);
+
+    RC try_upgrade(Tuple* tuple, const Tidword& old_tidw);
+
+    bool try_lock_when_unlocked(Tuple* tuple, Tidword& expected,
+                                uint8_t mode) const;
 
     static bool validate(Tuple* tuple, Tidword& expected);
 
