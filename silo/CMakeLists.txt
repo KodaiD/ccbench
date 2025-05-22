@@ -9,7 +9,7 @@ file(GLOB YCSB_SILO_SOURCES
         "ycsb_silo.cc"
         "transaction.cc"
         "util.cc"
-        )
+)
 
 file(GLOB TPCC_SILO_SOURCES
         "../common/result.cc"
@@ -18,7 +18,7 @@ file(GLOB TPCC_SILO_SOURCES
         "tpcc_silo.cc"
         "transaction.cc"
         "util.cc"
-        )
+)
 
 file(GLOB BOMB_SILO_SOURCES
         "../common/result.cc"
@@ -27,7 +27,7 @@ file(GLOB BOMB_SILO_SOURCES
         "bomb_silo.cc"
         "transaction.cc"
         "util.cc"
-        )
+)
 
 file(GLOB SBOMB_SILO_SOURCES
         "../common/result.cc"
@@ -36,17 +36,12 @@ file(GLOB SBOMB_SILO_SOURCES
         "sbomb_silo.cc"
         "transaction.cc"
         "util.cc"
-        )
-
-file(GLOB REPLAY_SOURCES
-        "replayTest.cc"
-        )
+)
 
 add_executable(ycsb_silo.exe ${YCSB_SILO_SOURCES})
 add_executable(tpcc_silo.exe ${TPCC_SILO_SOURCES})
 add_executable(bomb_silo.exe ${BOMB_SILO_SOURCES})
 add_executable(sbomb_silo.exe ${SBOMB_SILO_SOURCES})
-add_executable(replay_test.exe ${REPLAY_SOURCES})
 
 target_link_libraries(ycsb_silo.exe
         Boost::filesystem
@@ -54,7 +49,7 @@ target_link_libraries(ycsb_silo.exe
         ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
         ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
         Threads::Threads
-        )
+)
 
 target_link_libraries(tpcc_silo.exe
         Boost::filesystem
@@ -62,7 +57,7 @@ target_link_libraries(tpcc_silo.exe
         ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
         ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
         Threads::Threads
-        )
+)
 
 target_link_libraries(bomb_silo.exe
         Boost::filesystem
@@ -70,7 +65,7 @@ target_link_libraries(bomb_silo.exe
         ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
         ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
         Threads::Threads
-        )
+)
 
 target_link_libraries(sbomb_silo.exe
         Boost::filesystem
@@ -78,7 +73,7 @@ target_link_libraries(sbomb_silo.exe
         ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
         ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
         Threads::Threads
-        )
+)
 
 if (DEFINED ADD_ANALYSIS)
     add_definitions(-DADD_ANALYSIS=${ADD_ANALYSIS})
@@ -138,12 +133,6 @@ if (DEFINED VAL_SIZE)
     add_definitions(-DVAL_SIZE=${VAL_SIZE})
 else ()
     add_definitions(-DVAL_SIZE=4)
-endif ()
-
-if (DEFINED WAL)
-    add_definitions(-DWAL=${WAL})
-else ()
-    add_definitions(-DWAL=0)
 endif ()
 
 if (DEFINED INSERT_READ_DELAY_MS)

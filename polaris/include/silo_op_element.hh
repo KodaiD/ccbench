@@ -11,7 +11,7 @@ public:
     TupleBody body_;
 
     ReadElement(Storage s, std::string_view key, T* rcdptr, char* val,
-                Tidword tidword, bool reserved)
+                const Tidword tidword, bool reserved)
         : OpElement<T>::OpElement(s, key, rcdptr), reserved_(reserved) {
         tidword_.obj_ = tidword.obj_;
         memcpy(this->val_, val, VAL_SIZE);
@@ -36,7 +36,7 @@ public:
 
 private:
     Tidword tidword_;
-    char val_[VAL_SIZE];
+    char val_[VAL_SIZE]{};
     bool reserved_;
 };
 

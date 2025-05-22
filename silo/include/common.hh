@@ -1,7 +1,5 @@
 #pragma once
 
-#include <pthread.h>
-#include <atomic>
 #include <iostream>
 #include <queue>
 
@@ -42,8 +40,10 @@ DEFINE_uint64(batch_ratio, 0, "ratio of batch transaction.");
 DEFINE_uint64(batch_max_ope, 1000,
               "Total number of operations per single batch transaction.");
 DEFINE_uint64(batch_rratio, 100, "read ratio of single batch transaction.");
-DEFINE_uint64(batch_tuples, 0, "Number of update-only records for batch transaction.");
-DEFINE_bool(batch_simple_rr, false, "No one touches update-only records of batch transaction.");
+DEFINE_uint64(batch_tuples, 0,
+              "Number of update-only records for batch transaction.");
+DEFINE_bool(batch_simple_rr, false,
+            "No one touches update-only records of batch transaction.");
 DEFINE_bool(print_latencies, false,
             "True means print latencies of transactions.");
 DEFINE_bool(no_wait, false, "Enable no wait locking.");
@@ -71,5 +71,5 @@ DECLARE_bool(no_wait);
 
 alignas(CACHE_LINE_SIZE) GLOBAL uint32_t TotalThreadNum;
 alignas(CACHE_LINE_SIZE) GLOBAL uint32_t ReclamationEpoch;
-alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte *ThLocalEpoch;
-alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte *CTIDW;
+alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte* ThLocalEpoch;
+alignas(CACHE_LINE_SIZE) GLOBAL uint64_t_64byte* CTIDW;

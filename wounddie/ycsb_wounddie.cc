@@ -1,8 +1,7 @@
 #include <algorithm>
 #include <cctype>
-#include <ctype.h>
+#include <cstring>
 #include <pthread.h>
-#include <string.h>
 #include <sys/time.h>
 #include <sys/types.h>
 #include <unistd.h>
@@ -31,7 +30,7 @@ using namespace std;
 
 void worker(size_t thid, char& ready, const bool& start, const bool& quit) {
     Result& my_res = std::ref(SiloResult[thid]);
-    TxExecutor trans(thid, (Result*) &my_res, quit);
+    TxExecutor trans(static_cast<int>(thid), &my_res, quit);
     YcsbWorkload workload;
 #if BACK_OFF
     Backoff backoff(FLAGS_clocks_per_us);

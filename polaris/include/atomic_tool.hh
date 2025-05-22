@@ -7,23 +7,23 @@
 INLINE uint64_t atomicLoadGE();
 
 INLINE void atomicAddGE() {
-  uint64_t expected, desired;
-
-  expected = atomicLoadGE();
-  for (;;) {
-    desired = expected + 1;
-    if (__atomic_compare_exchange_n(&(GlobalEpoch.obj_), &expected, desired,
-                                    false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
-      break;
-  }
+    uint64_t expected;
+    expected = atomicLoadGE();
+    for (;;) {
+        if (const uint64_t desired = expected + 1; __atomic_compare_exchange_n(
+                    &(GlobalEpoch.obj_), &expected, desired, false,
+                    __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE))
+            break;
+    }
 }
 
 INLINE uint64_t atomicLoadGE() {
-  uint64_t_64byte result =
-          __atomic_load_n(&(GlobalEpoch.obj_), __ATOMIC_ACQUIRE);
-  return result.obj_;
+    const uint64_t_64byte result =
+            __atomic_load_n(&(GlobalEpoch.obj_), __ATOMIC_ACQUIRE);
+    return result.obj_;
 }
 
-INLINE void atomicStoreThLocalEpoch(unsigned int thid, uint64_t newval) {
-  __atomic_store_n(&(ThLocalEpoch[thid].obj_), newval, __ATOMIC_RELEASE);
+INLINE void atomicStoreThLocalEpoch(const unsigned int thid,
+                                    const uint64_t new_val) {
+    __atomic_store_n(&(ThLocalEpoch[thid].obj_), new_val, __ATOMIC_RELEASE);
 }

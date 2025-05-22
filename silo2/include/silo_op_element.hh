@@ -11,17 +11,17 @@ public:
     TupleBody body_;
     MCSMutex::MCSNode* node_ = nullptr;
 
-    ReadElement(Storage s, std::string_view key, T* rcdptr, char* val,
-                Tidword tidword, MCSMutex::MCSNode* node)
-        : OpElement<T>::OpElement(s, key, rcdptr), node_(node) {
+    ReadElement(Storage s, std::string_view key, T* rcd_ptr, const char* val,
+                const Tidword tidword, MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcd_ptr), node_(node) {
         tidword_.obj_ = tidword.obj_;
         memcpy(this->val_, val, VAL_SIZE);
     }
 
-    ReadElement(Storage s, std::string_view key, T* rcdptr, TupleBody&& body,
-                Tidword tidword, MCSMutex::MCSNode* node)
-        : OpElement<T>::OpElement(s, key, rcdptr), body_(std::move(body)),
-          node_(node), val_{} {
+    ReadElement(Storage s, std::string_view key, T* rcd_ptr, TupleBody&& body,
+                const Tidword tidword, MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcd_ptr), body_(std::move(body)),
+          node_(node) {
         tidword_.obj_ = tidword.obj_;
     }
 
@@ -31,11 +31,11 @@ public:
         return this->key_ < right.key_;
     }
 
-    Tidword get_tidword() { return tidword_; }
+    [[nodiscard]] Tidword get_tidword() const { return tidword_; }
 
 private:
     Tidword tidword_;
-    char val_[VAL_SIZE];
+    char val_[VAL_SIZE]{};
 };
 
 template<typename T>
@@ -45,28 +45,27 @@ public:
     TupleBody body_;
     MCSMutex::MCSNode* node_ = nullptr;
 
-    WriteElement(Storage s, std::string_view key, T* rcdptr,
-                 std::string_view val, OpType op, MCSMutex::MCSNode* node)
-        : OpElement<T>::OpElement(s, key, rcdptr, op), node_(node) {
-        static_assert(std::string_view("").size() == 0,
+    WriteElement(Storage s, std::string_view key, T* rcd_ptr,
+                 const std::string_view val, OpType op, MCSMutex::MCSNode* node)
+        : OpElement<T>::OpElement(s, key, rcd_ptr, op), node_(node) {
+        static_assert(std::string_view("").empty(),
                       "Expected behavior was broken.");
-        if (val.size() != 0) {
+        if (!val.empty()) {
             val_ptr_ = std::make_unique<char[]>(val.size());
             memcpy(val_ptr_.get(), val.data(), val.size());
             val_length_ = val.size();
         } else {
             val_length_ = 0;
         }
-        // else : fast approach for benchmark
     }
 
-    WriteElement(Storage s, std::string_view key, T* rcdptr, OpType op,
+    WriteElement(Storage s, std::string_view key, T* rcd_ptr, OpType op,
                  MCSMutex::MCSNode* node)
-        : OpElement<T>::OpElement(s, key, rcdptr, op), node_(node) {}
+        : OpElement<T>::OpElement(s, key, rcd_ptr, op), node_(node) {}
 
-    WriteElement(Storage s, std::string_view key, T* rcdptr, TupleBody&& body,
+    WriteElement(Storage s, std::string_view key, T* rcd_ptr, TupleBody&& body,
                  OpType op, MCSMutex::MCSNode* node)
-        : OpElement<T>::OpElement(s, key, rcdptr, op), body_(std::move(body)),
+        : OpElement<T>::OpElement(s, key, rcd_ptr, op), body_(std::move(body)),
           node_(node) {}
 
     bool operator<(const WriteElement& right) const {
@@ -75,11 +74,11 @@ public:
         return this->key_ < right.key_;
     }
 
-    char* get_val_ptr() { return val_ptr_.get(); }
+    [[nodiscard]] char* get_val_ptr() const { return val_ptr_.get(); }
 
-    std::size_t get_val_length() { return val_length_; }
+    [[nodiscard]] std::size_t get_val_length() const { return val_length_; }
 
 private:
-    std::unique_ptr<char[]> val_ptr_; // NOLINT
+    std::unique_ptr<char[]> val_ptr_;
     std::size_t val_length_{};
 };

@@ -135,12 +135,6 @@ else ()
     add_definitions(-DVAL_SIZE=4)
 endif ()
 
-if (DEFINED WAL)
-    add_definitions(-DWAL=${WAL})
-else ()
-    add_definitions(-DWAL=0)
-endif ()
-
 if (DEFINED INSERT_READ_DELAY_MS)
     add_definitions(-DINSERT_READ_DELAY_MS=${INSERT_READ_DELAY_MS})
 else ()

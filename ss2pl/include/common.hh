@@ -12,18 +12,14 @@
 
 #ifdef GLOBAL_VALUE_DEFINE
 #define GLOBAL
-
 #if MASSTREE_USE
 alignas(CACHE_LINE_SIZE) GLOBAL MasstreeWrapper<Tuple> MT;
 #endif
-
 #else
 #define GLOBAL extern
-
 #if MASSTREE_USE
 alignas(CACHE_LINE_SIZE) GLOBAL MasstreeWrapper<Tuple> MT;
 #endif
-
 #endif
 
 #ifdef GLOBAL_VALUE_DEFINE

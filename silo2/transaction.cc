@@ -11,7 +11,7 @@ extern void displayDB();
 extern void siloLeaderWork(uint64_t& epoch_timer_start,
                            uint64_t& epoch_timer_stop);
 
-TxExecutor::TxExecutor(int thid, Result* res, const bool& quit,
+TxExecutor::TxExecutor(const int thid, Result* res, const bool& quit,
                        std::vector<uint64_t>& privileges)
     : result_(res), backoff_(FLAGS_clocks_per_us), quit_(quit),
       callback_(TxScanCallback(this)), status_(), thid_(thid),
@@ -69,7 +69,8 @@ void TxExecutor::begin() {
     next_free_node = 0;
 }
 
-Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
+Status TxExecutor::read(const Storage s, const std::string_view key,
+                        TupleBody** body) {
     if (WriteElement<Tuple>* we = searchWriteSet(s, key)) {
         *body = &(we->body_);
         return Status::OK;
@@ -86,7 +87,7 @@ Status TxExecutor::read(Storage s, std::string_view key, TupleBody** body) {
     return Status::OK;
 }
 
-Status TxExecutor::read_internal(Storage s, std::string_view key,
+Status TxExecutor::read_internal(const Storage s, const std::string_view key,
                                  Tuple* tuple) {
     if (is_pcc_) {
         auto node = allocate_node();
@@ -126,7 +127,8 @@ Status TxExecutor::read_internal(Storage s, std::string_view key,
     return Status::OK;
 }
 
-Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
+Status TxExecutor::write(const Storage s, const std::string_view key,
+                         TupleBody&& body) {
     if (has_privilege() && abort_cnt < FLAGS_threshold) {
         hand_over_privilege();
     }
@@ -145,7 +147,8 @@ Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
     return Status::OK;
 }
 
-Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
+Status TxExecutor::insert(const Storage s, const std::string_view key,
+                          TupleBody&& body) {
     if (has_privilege() && abort_cnt < FLAGS_threshold) {
         hand_over_privilege();
     }
@@ -182,7 +185,7 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     return Status::OK;
 }
 
-Status TxExecutor::delete_record(Storage s, std::string_view key) {
+Status TxExecutor::delete_record(const Storage s, const std::string_view key) {
     if (has_privilege() && abort_cnt < FLAGS_threshold) {
         hand_over_privilege();
     }
@@ -243,14 +246,17 @@ void TxExecutor::lockWriteSet() {
     }
 }
 
-Status TxExecutor::scan(const Storage s, std::string_view left_key,
-                        bool l_exclusive, std::string_view right_key,
-                        bool r_exclusive, std::vector<TupleBody*>& result) {
+Status TxExecutor::scan(const Storage s, const std::string_view left_key,
+                        const bool l_exclusive,
+                        const std::string_view right_key,
+                        const bool r_exclusive,
+                        std::vector<TupleBody*>& result) {
     return scan(s, left_key, l_exclusive, right_key, r_exclusive, result, -1);
 }
 
-Status TxExecutor::scan(const Storage s, std::string_view left_key,
-                        const bool l_exclusive, std::string_view right_key,
+Status TxExecutor::scan(const Storage s, const std::string_view left_key,
+                        const bool l_exclusive,
+                        const std::string_view right_key,
                         const bool r_exclusive, std::vector<TupleBody*>& result,
                         const int64_t limit) {
     if (has_privilege() && abort_cnt < FLAGS_threshold) {
@@ -272,9 +278,7 @@ Status TxExecutor::scan(const Storage s, std::string_view left_key,
             result.emplace_back(&(we->body_));
             continue;
         }
-        if (const Status stat = read_internal(s, itr->body_.get_key(), itr);
-            stat != Status::OK && stat != Status::WARN_NOT_FOUND)
-            return stat;
+        read_internal(s, itr->body_.get_key(), itr);
     }
     if (read_set_init_size != read_set_.size()) {
         for (auto itr =
@@ -381,13 +385,13 @@ bool TxExecutor::commit() {
     return false;
 }
 
-void TxExecutor::unlockReadSet() {
+void TxExecutor::unlockReadSet() const {
     if (!is_pcc_) ERR;
     for (const auto& re : read_set_) { re.rcdptr_->mutex_.unlock(re.node_); }
 }
 
 vector<ReadElement<Tuple>>::iterator
-TxExecutor::searchReadSetIterator(Storage s, std::string_view key) {
+TxExecutor::searchReadSetIterator(const Storage s, const std::string_view key) {
     for (auto re = read_set_.begin(); re != read_set_.end(); ++re) {
         if (re->storage_ != s) continue;
         if (re->key_ == key) return re;
@@ -395,7 +399,8 @@ TxExecutor::searchReadSetIterator(Storage s, std::string_view key) {
     return read_set_.end();
 }
 
-ReadElement<Tuple>* TxExecutor::searchReadSet(Storage s, std::string_view key) {
+ReadElement<Tuple>* TxExecutor::searchReadSet(const Storage s,
+                                              const std::string_view key) {
     for (auto& re : read_set_) {
         if (re.storage_ != s) continue;
         if (re.key_ == key) return &re;
@@ -403,8 +408,8 @@ ReadElement<Tuple>* TxExecutor::searchReadSet(Storage s, std::string_view key) {
     return nullptr;
 }
 
-WriteElement<Tuple>* TxExecutor::searchWriteSet(Storage s,
-                                                std::string_view key) {
+WriteElement<Tuple>* TxExecutor::searchWriteSet(const Storage s,
+                                                const std::string_view key) {
     for (auto& we : write_set_) {
         if (we.storage_ != s) continue;
         if (we.key_ == key) return &we;
@@ -412,7 +417,7 @@ WriteElement<Tuple>* TxExecutor::searchWriteSet(Storage s,
     return nullptr;
 }
 
-void TxExecutor::unlockWriteSet() {
+void TxExecutor::unlockWriteSet() const {
     for (const auto& itr : write_set_) {
         itr.rcdptr_->mutex_.unlock(itr.node_);
     }

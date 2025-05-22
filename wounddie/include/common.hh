@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iostream>
-#include <pthread.h>
 #include <queue>
 
 #include "tuple.hh"

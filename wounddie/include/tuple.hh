@@ -37,7 +37,7 @@ public:
     alignas(CACHE_LINE_SIZE) Tidword tidword_;
     TupleBody body_;
 
-    Tuple() {}
+    Tuple() = default;
 
     void init([[maybe_unused]] size_t thid, TupleBody&& body,
               [[maybe_unused]] void* p) {

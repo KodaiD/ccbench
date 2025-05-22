@@ -1,6 +1,5 @@
 #pragma once
 
-#include <cstdint>
 #include <cstring>
 
 #include "../../include/cache_line_size.hh"
@@ -19,7 +18,7 @@ struct Tidword {
         };
     };
 
-    Tidword() : obj_(0) {};
+    Tidword() : obj_(0) {}
 
     bool operator==(const Tidword& right) const { return obj_ == right.obj_; }
 
@@ -40,7 +39,6 @@ public:
 
     void init([[maybe_unused]] size_t thid, TupleBody&& body,
               [[maybe_unused]] void* p) {
-        // for initializer
         tidword_.epoch = 1;
         tidword_.latest = true;
         tidword_.absent = false;

@@ -60,7 +60,8 @@ void TxExecutor::begin() {
     ThLocalStatus[thid_].obj_ = STATUS_ACTIVE;
 }
 
-Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
+Status TxExecutor::insert(const Storage s, const std::string_view key,
+                          TupleBody&& body) {
     if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
         prepare_abort();
         return Status::ERROR_LOCK_FAILED;
@@ -100,7 +101,7 @@ Status TxExecutor::insert(Storage s, std::string_view key, TupleBody&& body) {
     return Status::OK;
 }
 
-Status TxExecutor::delete_record(Storage s, std::string_view key) {
+Status TxExecutor::delete_record(const Storage s, const std::string_view key) {
     if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
         prepare_abort();
         return Status::ERROR_LOCK_FAILED;
@@ -184,7 +185,7 @@ Status TxExecutor::read(const Storage s, const std::string_view key,
     return Status::OK;
 }
 
-Status TxExecutor::read_internal(Storage s, std::string_view key,
+Status TxExecutor::read_internal(const Storage s, const std::string_view key,
                                  Tuple* tuple) {
     if (super_) {
         TupleBody body;
@@ -408,7 +409,8 @@ bool TxExecutor::validationPhase() {
     return true;
 }
 
-Status TxExecutor::write(Storage s, std::string_view key, TupleBody&& body) {
+Status TxExecutor::write(const Storage s, const std::string_view key,
+                         TupleBody&& body) {
     if (loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
         prepare_abort();
         return Status::ERROR_LOCK_FAILED;

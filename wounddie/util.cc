@@ -91,7 +91,7 @@ void ShowOptParameters() {
          << ": NO_WAIT_LOCKING_IN_VALIDATION " << NO_WAIT_LOCKING_IN_VALIDATION
          << ": PARTITION_TABLE " << PARTITION_TABLE << ": PROCEDURE_SORT "
          << PROCEDURE_SORT << ": SLEEP_READ_PHASE " << SLEEP_READ_PHASE
-         << ": VAL_SIZE " << VAL_SIZE << ": WAL " << WAL
+         << ": VAL_SIZE " << VAL_SIZE
 #ifdef INSERT_READ_DELAY_MS
          << ": INSERT_READ_DELAY_MS " << INSERT_READ_DELAY_MS
 #endif

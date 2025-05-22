@@ -8,7 +8,6 @@ INLINE uint64_t atomicLoadGE();
 
 INLINE void atomicAddGE() {
     uint64_t expected;
-
     expected = atomicLoadGE();
     for (;;) {
         if (const uint64_t desired = expected + 1; __atomic_compare_exchange_n(
