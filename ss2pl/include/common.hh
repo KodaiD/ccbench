@@ -1,9 +1,5 @@
 #pragma once
 
-#include <atomic>
-
-#include "../../include/cache_line_size.hh"
-#include "../../include/int64byte.hh"
 #include "../../include/masstree_wrapper.hh"
 #include "tuple.hh"
 

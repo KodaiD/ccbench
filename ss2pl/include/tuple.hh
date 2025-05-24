@@ -1,7 +1,5 @@
 #pragma once
 
-#include <atomic>
-
 #include "../../include/rwlock.hh"
 #include "../../include/tuple_body.hh"
 

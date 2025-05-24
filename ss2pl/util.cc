@@ -2,15 +2,9 @@
 #include <sys/types.h> // syscall(SSY_gettid),
 #include <unistd.h>    // syscall(SSY_gettid),
 
-#include <atomic>
 #include <bitset>
-#include <cstdint>
 #include <iomanip>
 #include <iostream>
-#include <limits>
-#include <thread>
-#include <type_traits>
-#include <vector>
 
 #include "../include/debug.hh"
 #include "../include/masstree_wrapper.hh"
@@ -42,11 +36,6 @@ void displayParameter() {
     cout << "#FLAGS_ycsb:\t\t" << FLAGS_ycsb << endl;
     cout << "#FLAGS_zipf_skew:\t" << FLAGS_zipf_skew << endl;
 }
-
-void partTableInit([[maybe_unused]] size_t thid, uint64_t start, uint64_t end) {
-}
-
-void makeDB() {}
 
 void ShowOptParameters() {
     cout << "#ShowOptParameters()"

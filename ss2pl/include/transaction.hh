@@ -7,6 +7,8 @@
 #include "../../include/procedure.hh"
 #include "../../include/result.hh"
 #include "../../include/rwlock.hh"
+#include "common.hh"
+#include "scan_callback.hh"
 #include "ss2pl_op_element.hh"
 #include "tuple.hh"
 
@@ -21,6 +23,8 @@ enum class TransactionStatus : uint8_t {
 
 extern void writeValGenerator(char* writeVal, size_t val_size, size_t thid);
 
+class TxScanCallback;
+
 class TxExecutor {
 public:
     alignas(CACHE_LINE_SIZE) int thid_;
@@ -34,13 +38,14 @@ public:
     vector<Procedure> pro_set_;
     std::deque<Tuple*> gc_records_;
     const bool& quit_;
+    TxScanCallback callback_;
     bool reconnoitering_ = false;
     bool is_ronly_ = false;
     bool is_batch_ = false;
 
     TxExecutor(const int thid, Result* res, const bool& quit)
-        : thid_(thid), result_(res), backoff_(FLAGS_clocks_per_us),
-          quit_(quit) {}
+        : thid_(thid), result_(res), backoff_(FLAGS_clocks_per_us), quit_(quit),
+          callback_(TxScanCallback(this)) {}
 
     SetElement<Tuple>* searchReadSet(Storage s, std::string_view key);
 
@@ -55,6 +60,10 @@ public:
     Status scan(Storage s, std::string_view left_key, bool l_exclusive,
                 std::string_view right_key, bool r_exclusive,
                 std::vector<TupleBody*>& result);
+
+    Status scan(Storage s, std::string_view left_key, bool l_exclusive,
+                std::string_view right_key, bool r_exclusive,
+                std::vector<TupleBody*>& result, int64_t limit);
 
     Status write(Storage s, std::string_view key, TupleBody&& body);
 
@@ -76,7 +85,7 @@ public:
 
     void reconnoiter_end();
 
-    bool isLeader() const;
+    [[nodiscard]] bool isLeader() const;
 
     void leaderWork();
 };

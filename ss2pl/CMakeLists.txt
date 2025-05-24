@@ -2,6 +2,24 @@ include(GNUInstallDirs)
 include(CMakePackageConfigHelpers)
 include(CompileOptions)
 
+file(GLOB YCSB_SS2PL_SOURCES
+        "../common/result.cc"
+        "../common/util.cc"
+        "result.cc"
+        "ycsb_ss2pl.cc"
+        "transaction.cc"
+        "util.cc"
+)
+
+file(GLOB TPCC_SS2PL_SOURCES
+        "../common/result.cc"
+        "../common/util.cc"
+        "result.cc"
+        "tpcc_ss2pl.cc"
+        "transaction.cc"
+        "util.cc"
+)
+
 file(GLOB BOMB_SS2PL_SOURCES
         "../common/result.cc"
         "../common/util.cc"
@@ -9,9 +27,27 @@ file(GLOB BOMB_SS2PL_SOURCES
         "bomb_ss2pl.cc"
         "transaction.cc"
         "util.cc"
-        )
+)
 
+add_executable(ycsb_ss2pl.exe ${YCSB_SS2PL_SOURCES})
+add_executable(tpcc_ss2pl.exe ${TPCC_SS2PL_SOURCES})
 add_executable(bomb_ss2pl.exe ${BOMB_SS2PL_SOURCES})
+
+target_link_libraries(ycsb_ss2pl.exe
+        Boost::filesystem
+        gflags::gflags
+        ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
+        ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
+        Threads::Threads
+)
+
+target_link_libraries(tpcc_ss2pl.exe
+        Boost::filesystem
+        gflags::gflags
+        ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
+        ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
+        Threads::Threads
+)
 
 target_link_libraries(bomb_ss2pl.exe
         Boost::filesystem
@@ -19,7 +55,7 @@ target_link_libraries(bomb_ss2pl.exe
         ${THIRD_PARTY_DIR}/mimalloc/out/release/libmimalloc.a
         ${THIRD_PARTY_DIR}/masstree/libkohler_masstree_json.a
         Threads::Threads
-        )
+)
 
 if (DEFINED ADD_ANALYSIS)
     add_definitions(-DADD_ANALYSIS=${ADD_ANALYSIS})

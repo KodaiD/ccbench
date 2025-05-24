@@ -1,14 +1,13 @@
-
+#include <atomic>
 #include <cstdio>
 #include <cstring>
-
-#include <atomic>
 
 #include "../include/backoff.hh"
 #include "../include/debug.hh"
 #include "../include/procedure.hh"
 #include "../include/result.hh"
 #include "include/common.hh"
+#include "include/scan_callback.hh"
 #include "include/transaction.hh"
 
 using namespace std;
@@ -139,13 +138,21 @@ Status TxExecutor::scan(const Storage s, const std::string_view left_key,
                         const std::string_view right_key,
                         const bool r_exclusive,
                         std::vector<TupleBody*>& result) {
+    return scan(s, left_key, l_exclusive, right_key, r_exclusive, result, -1);
+}
+
+Status TxExecutor::scan(const Storage s, const std::string_view left_key,
+                        const bool l_exclusive,
+                        const std::string_view right_key,
+                        const bool r_exclusive, std::vector<TupleBody*>& result,
+                        const int64_t limit) {
     result.clear();
     const auto r_set_init_size = read_set_.size();
     std::vector<Tuple*> scan_res;
     Masstrees[get_storage(s)].scan(
             left_key.empty() ? nullptr : left_key.data(), left_key.size(),
             l_exclusive, right_key.empty() ? nullptr : right_key.data(),
-            right_key.size(), r_exclusive, &scan_res, false);
+            right_key.size(), r_exclusive, &scan_res, limit, callback_);
     for (auto&& itr : scan_res) {
         SetElement<Tuple>* e = searchReadSet(s, itr->body_.get_key());
         if (e) {
@@ -352,4 +359,14 @@ void TxExecutor::leaderWork() {
 #if BACK_OFF
     leaderBackoffWork(backoff_, SS2PLResult);
 #endif
+}
+
+void TxScanCallback::on_resp_node(const MasstreeWrapper<Tuple>::node_type* n,
+                                  uint64_t version) {
+    // if (const auto it = tx_->node.find((void*) n); it == tx_->node_map_.end()) {
+    //     tx_->node_map_.emplace_hint(it, (void*) n, version);
+    // } else if (it->second != version) {
+    //     tx_->status_ = TransactionStatus::aborted;
+    // }
+    return;
 }
