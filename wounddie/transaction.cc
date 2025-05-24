@@ -31,7 +31,11 @@ void TxExecutor::gc_records() {
 }
 
 void TxExecutor::abort() {
-    if (super_) { unlockReadSet(); }
+    if (super_) {
+        unlockReadSet();
+        unlockWriteSet();
+        storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
+    }
     for (auto& we : write_set_) {
         if (we.op_ == OpType::INSERT) {
             Masstrees[get_storage(we.storage_)].remove_value(we.key_);
@@ -63,7 +67,7 @@ void TxExecutor::begin() {
 Status TxExecutor::insert(const Storage s, const std::string_view key,
                           TupleBody&& body) {
     if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
-        prepare_abort();
+        status_ = TransactionStatus::aborted;
         return Status::ERROR_LOCK_FAILED;
     }
     if (searchWriteSet(s, key)) return Status::WARN_ALREADY_EXISTS;
@@ -88,7 +92,6 @@ Status TxExecutor::insert(const Storage s, const std::string_view key,
                 it != node_map_.end()) {
                 if (unlikely(it->second != insert_info.old_version)) {
                     status_ = TransactionStatus::aborted;
-                    if (super_) { prepare_abort(); }
                     return Status::ERROR_CONCURRENT_WRITE_OR_DELETE;
                 }
                 it->second = insert_info.new_version;
@@ -103,7 +106,7 @@ Status TxExecutor::insert(const Storage s, const std::string_view key,
 
 Status TxExecutor::delete_record(const Storage s, const std::string_view key) {
     if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
-        prepare_abort();
+        status_ = TransactionStatus::aborted;
         return Status::ERROR_LOCK_FAILED;
     }
     for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
@@ -115,7 +118,10 @@ Status TxExecutor::delete_record(const Storage s, const std::string_view key) {
     if (super_) {
         const auto rc = try_write_lock(tuple);
         if (rc == RC::NOT_FOUND) { return Status::WARN_NOT_FOUND; }
-        if (rc == RC::DIE) { return Status::ERROR_LOCK_FAILED; }
+        if (rc == RC::DIE) {
+            status_ = TransactionStatus::aborted;
+            return Status::ERROR_LOCK_FAILED;
+        }
         write_set_.emplace_back(s, key, tuple, OpType::DELETE);
         return Status::OK;
     }
@@ -165,7 +171,7 @@ void TxExecutor::lockWriteSet() {
 Status TxExecutor::read(const Storage s, const std::string_view key,
                         TupleBody** body) {
     if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
-        prepare_abort();
+        status_ = TransactionStatus::aborted;
         return Status::ERROR_LOCK_FAILED;
     }
     if (ReadElement<Tuple>* re = searchReadSet(s, key)) {
@@ -177,7 +183,7 @@ Status TxExecutor::read(const Storage s, const std::string_view key,
         return Status::OK;
     }
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
-    if (tuple == nullptr) return Status::WARN_NOT_FOUND;
+    if (tuple == nullptr) { return Status::WARN_NOT_FOUND; }
     if (const Status stat = read_internal(s, key, tuple); stat != Status::OK) {
         return stat;
     }
@@ -194,7 +200,10 @@ Status TxExecutor::read_internal(const Storage s, const std::string_view key,
         while (true) {
             const auto rc = try_read_lock(tuple, expected);
             if (rc == RC::NOT_FOUND) { return Status::WARN_NOT_FOUND; }
-            if (rc == RC::DIE) { return Status::ERROR_LOCK_FAILED; }
+            if (rc == RC::DIE) {
+                status_ = TransactionStatus::aborted;
+                return Status::ERROR_LOCK_FAILED;
+            }
             if (rc == RC::ALREADY_READ_LOCKED) {
                 body = TupleBody(key, tuple->body_.get_val(),
                                  tuple->body_.get_val_align());
@@ -244,7 +253,7 @@ Status TxExecutor::scan(const Storage s, const std::string_view left_key,
                         const bool r_exclusive, std::vector<TupleBody*>& result,
                         const int64_t limit) {
     if (super_ && loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
-        prepare_abort();
+        status_ = TransactionStatus::aborted;
         return Status::ERROR_LOCK_FAILED;
     }
     result.clear();
@@ -265,8 +274,6 @@ Status TxExecutor::scan(const Storage s, const std::string_view left_key,
         }
         if (const Status stat = read_internal(s, itr->body_.get_key(), itr);
             stat != Status::OK && stat != Status::WARN_NOT_FOUND) {
-            prepare_abort();
-            storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
             return stat;
         }
     }
@@ -336,18 +343,14 @@ bool TxExecutor::validationPhase() {
     if (super_) {
         if (auto status = loadAcquire(ThLocalStatus[thid_].obj_);
             status == STATUS_ABORTED) {
-            prepare_abort();
+            this->status_ = TransactionStatus::aborted;
             return false;
         }
         for (auto& we : write_set_) {
             Tidword expected;
             expected.obj_ = loadAcquire(we.rcdptr_->tidword_.obj_);
             while (true) {
-                if (expected.thid != thid_) {
-                    prepare_abort();
-                    storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
-                    return false;
-                }
+                if (expected.thid != thid_) { return false; }
                 Tidword desired;
                 desired = expected;
                 desired.lock = EXLOCKED;
@@ -412,7 +415,7 @@ bool TxExecutor::validationPhase() {
 Status TxExecutor::write(const Storage s, const std::string_view key,
                          TupleBody&& body) {
     if (loadAcquire(ThLocalStatus[thid_].obj_) == STATUS_ABORTED) {
-        prepare_abort();
+        status_ = TransactionStatus::aborted;
         return Status::ERROR_LOCK_FAILED;
     }
     if (searchWriteSet(s, key)) { return Status::OK; }
@@ -424,7 +427,10 @@ Status TxExecutor::write(const Storage s, const std::string_view key,
         if (re != read_set_.end()) {
             const auto rc = try_upgrade(re->rcdptr_, re->get_tidword());
             if (rc == RC::NOT_FOUND) { return Status::WARN_NOT_FOUND; }
-            if (rc == RC::DIE) { return Status::ERROR_LOCK_FAILED; }
+            if (rc == RC::DIE) {
+                status_ = TransactionStatus::aborted;
+                return Status::ERROR_LOCK_FAILED;
+            }
             write_set_.emplace_back(s, key, re->rcdptr_, std::move(body),
                                     OpType::UPDATE);
             read_set_.erase(re);
@@ -434,7 +440,10 @@ Status TxExecutor::write(const Storage s, const std::string_view key,
         if (tuple == nullptr) { return Status::WARN_NOT_FOUND; }
         const auto rc = try_write_lock(tuple);
         if (rc == RC::NOT_FOUND) { return Status::WARN_NOT_FOUND; }
-        if (rc == RC::DIE) { return Status::ERROR_LOCK_FAILED; }
+        if (rc == RC::DIE) {
+            status_ = TransactionStatus::aborted;
+            return Status::ERROR_LOCK_FAILED;
+        }
         write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE);
         return Status::OK;
     }
@@ -552,11 +561,6 @@ INLINE bool TxExecutor::less_than(const Tidword& tid_word) const {
     return false;
 }
 
-INLINE void TxExecutor::prepare_abort() {
-    this->status_ = TransactionStatus::aborted;
-    unlockWriteSet();
-}
-
 INLINE RC TxExecutor::wound_or_die(Tuple* tuple, Tidword& expected,
                                    const uint8_t mode) {
     if (less_than(expected)) { // Wound & Lock
@@ -571,7 +575,6 @@ INLINE RC TxExecutor::wound_or_die(Tuple* tuple, Tidword& expected,
         return RC::RETRY;
     }
     // Die
-    prepare_abort();
     storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
     return RC::DIE;
 }
@@ -641,8 +644,6 @@ INLINE RC TxExecutor::try_upgrade(Tuple* tuple, const Tidword& old_tidw) {
             if (expected.absent) { return RC::NOT_FOUND; }
             if (expected.tid != old_tidw.tid ||
                 expected.epoch != old_tidw.epoch) {
-                prepare_abort();
-                storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
                 return RC::DIE;
             }
             if (try_lock_when_unlocked(tuple, expected, SUPER_SHLOCKED)) {
@@ -660,8 +661,6 @@ INLINE RC TxExecutor::try_upgrade(Tuple* tuple, const Tidword& old_tidw) {
                    expected.lock == SUPER_EXLOCKED) {
             if (expected.tid != old_tidw.tid ||
                 expected.epoch != old_tidw.epoch) { // Validate
-                prepare_abort();
-                storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
                 return RC::DIE;
             }
             if (const auto rc = wound_or_die(tuple, expected, SUPER_EXLOCKED);
@@ -706,7 +705,7 @@ INLINE void TxExecutor::unlock(Tuple* tuple) const {
     Tidword expected;
     expected.obj_ = loadAcquire(tuple->tidword_.obj_);
     while (true) {
-        if (expected.thid != thid_) break;
+        if (expected.thid != thid_) { break; }
         if (expected.lock == EXLOCKED) {
             Tidword desired = expected;
             desired.thid = UINT16_MAX;

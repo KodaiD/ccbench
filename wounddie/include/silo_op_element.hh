@@ -60,14 +60,18 @@ public:
         } else {
             val_length_ = 0;
         }
+        is_locked_ = false;
     }
 
     WriteElement(Storage s, std::string_view key, T* rcd_ptr, OpType op)
-        : OpElement<T>::OpElement(s, key, rcd_ptr, op) {}
+        : OpElement<T>::OpElement(s, key, rcd_ptr, op) {
+        is_locked_ = false;
+    }
 
     WriteElement(Storage s, std::string_view key, T* rcd_ptr, TupleBody&& body,
                  OpType op)
         : OpElement<T>::OpElement(s, key, rcd_ptr, op), body_(std::move(body)) {
+        is_locked_ = false;
     }
 
     bool operator<(const WriteElement& right) const {
@@ -83,4 +87,5 @@ public:
 private:
     std::unique_ptr<char[]> val_ptr_;
     std::size_t val_length_{};
+    bool is_locked_;
 };

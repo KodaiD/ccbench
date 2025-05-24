@@ -112,8 +112,6 @@ public:
 
     bool less_than(const Tidword& tid_word) const;
 
-    void prepare_abort();
-
     RC wound_or_die(Tuple* tuple, Tidword& expected, uint8_t mode);
 
     RC try_read_lock(Tuple* tuple, Tidword& expected);
