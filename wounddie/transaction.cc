@@ -377,21 +377,13 @@ bool TxExecutor::validationPhase() {
         if (itr.get_tidword().epoch != check.epoch ||
             itr.get_tidword().tid != check.tid) {
             this->status_ = TransactionStatus::aborted;
-            if (super_) {
-                storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
-                unlockReadSet();
-            }
-            unlockWriteSet();
+            if (!super_) { unlockWriteSet(); }
             return false;
         }
         if ((check.lock == EXLOCKED || check.lock == SUPER_EXLOCKED) &&
             !searchWriteSet(itr.storage_, itr.key_)) {
             this->status_ = TransactionStatus::aborted;
-            if (super_) {
-                storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
-                unlockReadSet();
-            }
-            unlockWriteSet();
+            if (!super_) { unlockWriteSet(); }
             return false;
         }
         max_rset_ = std::max(max_rset_, check);
@@ -400,11 +392,7 @@ bool TxExecutor::validationPhase() {
         if (auto node = static_cast<MasstreeWrapper<Tuple>::node_type*>(fst);
             node->full_version_value() != snd) {
             this->status_ = TransactionStatus::aborted;
-            if (super_) {
-                storeRelease(ThLocalStatus[thid_].obj_, STATUS_ABORTED);
-                unlockReadSet();
-            }
-            unlockWriteSet();
+            if (!super_) { unlockWriteSet(); }
             return false;
         }
     }
