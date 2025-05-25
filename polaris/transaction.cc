@@ -36,13 +36,7 @@ void TxExecutor::abort() {
     write_set_.clear();
     node_map_.clear();
 #if BACK_OFF
-#if ADD_ANALYSIS
-    std::uint64_t start(rdtscp());
-#endif
     Backoff::backoff(FLAGS_clocks_per_us);
-#if ADD_ANALYSIS
-    result_->local_backoff_latency_ += rdtscp() - start;
-#endif
 #endif
 }
 
@@ -62,14 +56,8 @@ void TxExecutor::begin() {
 
 Status TxExecutor::insert(const Storage s, const std::string_view key,
                           TupleBody&& body) {
-#if ADD_ANALYSIS
-    std::uint64_t start = rdtscp();
-#endif
     if (searchWriteSet(s, key)) return Status::WARN_ALREADY_EXISTS;
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
-#if ADD_ANALYSIS
-    ++result_->local_tree_traversal_;
-#endif
     if (tuple != nullptr) { return Status::WARN_ALREADY_EXISTS; }
     tuple = new Tuple();
     tuple->init(std::move(body));
@@ -95,32 +83,20 @@ Status TxExecutor::insert(const Storage s, const std::string_view key,
         ERR;
     }
     write_set_.emplace_back(s, key, tuple, OpType::INSERT);
-#if ADD_ANALYSIS
-    result_->local_write_latency_ += rdtscp() - start;
-#endif
     return Status::OK;
 }
 
 Status TxExecutor::delete_record(const Storage s, const std::string_view key) {
-#if ADD_ANALYSIS
-    std::uint64_t start = rdtscp();
-#endif
     Tidword tidw;
     for (auto itr = write_set_.begin(); itr != write_set_.end(); ++itr) {
         if (itr->storage_ != s) continue;
         if (itr->key_ == key) { write_set_.erase(itr); }
     }
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
-#if ADD_ANALYSIS
-    ++result_->local_tree_traversal_;
-#endif
     if (tuple == nullptr) { return Status::WARN_NOT_FOUND; }
     tidw.obj_ = loadAcquire(tuple->tidword_.obj_);
     if (tidw.absent) { return Status::WARN_NOT_FOUND; }
     write_set_.emplace_back(s, key, tuple, OpType::DELETE);
-#if ADD_ANALYSIS
-    result_->local_write_latency_ += rdtscp() - start;
-#endif
     return Status::OK;
 }
 
@@ -151,7 +127,6 @@ void TxExecutor::lockWriteSet() {
             }
         }
         if (itr.op_ == OpType::UPDATE && itr.rcdptr_->tidword_.absent) {
-            unlockWriteSet();
             this->status_ = TransactionStatus::aborted;
             return;
         }
@@ -161,37 +136,20 @@ void TxExecutor::lockWriteSet() {
 
 Status TxExecutor::read(const Storage s, const std::string_view key,
                         TupleBody** body) {
-#if ADD_ANALYSIS
-    std::uint64_t start = rdtscp();
-#endif
-    Status stat;
-    WriteElement<Tuple>* we;
-    if (ReadElement<Tuple>* re = searchReadSet(s, key)) {
-        *body = &(re->body_);
-#if ADD_ANALYSIS
-        result_->local_read_latency_ += rdtscp() - start;
-#endif
+    if (WriteElement<Tuple>* we = searchWriteSet(s, key)) {
+        *body = &(we->body_);
         return Status::OK;
     }
-    we = searchWriteSet(s, key);
-    if (we) {
-        *body = &(we->body_);
-#if ADD_ANALYSIS
-        result_->local_read_latency_ += rdtscp() - start;
-#endif
+    if (ReadElement<Tuple>* re = searchReadSet(s, key)) {
+        *body = &(re->body_);
         return Status::OK;
     }
     Tuple* tuple = Masstrees[get_storage(s)].get_value(key);
-#if ADD_ANALYSIS
-    ++result_->local_tree_traversal_;
-#endif
     if (tuple == nullptr) return Status::WARN_NOT_FOUND;
-    stat = read_internal(s, key, tuple);
-    if (stat != Status::OK) { return stat; }
+    if (const Status stat = read_internal(s, key, tuple); stat != Status::OK) {
+        return stat;
+    }
     *body = &(read_set_.back().body_);
-#if ADD_ANALYSIS
-    result_->local_read_latency_ += rdtscp() - start;
-#endif
     return Status::OK;
 }
 
@@ -301,9 +259,6 @@ void TxExecutor::unlockWriteSet() const {
 }
 
 bool TxExecutor::validationPhase() {
-#if ADD_ANALYSIS
-    std::uint64_t start = rdtscp();
-#endif
     sort(write_set_.begin(), write_set_.end());
     lockWriteSet();
     if (this->status_ == TransactionStatus::aborted) return false;
@@ -315,19 +270,11 @@ bool TxExecutor::validationPhase() {
         check.obj_ = loadAcquire(itr.rcdptr_->tidword_.obj_);
         if (itr.get_tidword().epoch != check.epoch ||
             itr.get_tidword().data_ver != check.data_ver) {
-#if ADD_ANALYSIS
-            result_->local_vali_latency_ += rdtscp() - start;
-#endif
             this->status_ = TransactionStatus::aborted;
-            unlockWriteSet();
             return false;
         }
         if (check.lock && !searchWriteSet(itr.storage_, itr.key_)) {
-#if ADD_ANALYSIS
-            result_->local_vali_latency_ += rdtscp() - start;
-#endif
             this->status_ = TransactionStatus::aborted;
-            unlockWriteSet();
             return false;
         }
         max_rset_ = std::max(max_rset_, check);
@@ -336,38 +283,24 @@ bool TxExecutor::validationPhase() {
         if (auto node = static_cast<MasstreeWrapper<Tuple>::node_type*>(fst);
             node->full_version_value() != snd) {
             this->status_ = TransactionStatus::aborted;
-            unlockWriteSet();
             return false;
         }
     }
-#if ADD_ANALYSIS
-    result_->local_vali_latency_ += rdtscp() - start;
-#endif
     this->status_ = TransactionStatus::committed;
     return true;
 }
 
 Status TxExecutor::write(const Storage s, const std::string_view key,
                          TupleBody&& body) {
-#if ADD_ANALYSIS
-    std::uint64_t start = rdtscp();
-#endif
-    if (searchWriteSet(s, key)) goto FINISH_WRITE;
+    if (searchWriteSet(s, key)) { return Status::OK; }
     Tuple* tuple;
     if (const ReadElement<Tuple>* re = searchReadSet(s, key)) {
         tuple = re->rcdptr_;
     } else {
         tuple = Masstrees[get_storage(s)].get_value(key);
-#if ADD_ANALYSIS
-        ++result_->local_tree_traversal_;
-#endif
         if (tuple == nullptr) return Status::WARN_NOT_FOUND;
     }
     write_set_.emplace_back(s, key, tuple, std::move(body), OpType::UPDATE);
-FINISH_WRITE:
-#if ADD_ANALYSIS
-    result_->local_write_latency_ += rdtscp() - start;
-#endif
     return Status::OK;
 }
 
@@ -494,26 +427,15 @@ INLINE Tidword TxExecutor::cleanup_read(const Tidword tidw, const uint8_t prio,
 }
 
 INLINE Tidword TxExecutor::cleanup_write_for_abort(const Tidword tidw) {
-    Tidword new_tidw;
-    new_tidw.obj_ = tidw.obj_;
-    new_tidw.lock = false;
-    new_tidw.prio = 0;
-    new_tidw.prio_ver++;
-    new_tidw.ref_cnt = 0;
-    return new_tidw;
+    return Tidword(false, tidw.latest, tidw.absent, tidw.prio_ver + 1, 0, 0,
+                   tidw.data_ver, tidw.epoch);
 }
 
 INLINE Tidword TxExecutor::cleanup_write_for_commit(const Tidword tidw,
                                                     const uint32_t new_data_ver,
                                                     const uint32_t epoch) {
-    Tidword new_tidw;
-    new_tidw.epoch = epoch;
-    new_tidw.data_ver = new_data_ver;
-    new_tidw.lock = false;
-    new_tidw.prio = 0;
-    new_tidw.prio_ver = tidw.prio_ver + 1;
-    new_tidw.ref_cnt = 0;
-    return new_tidw;
+    return Tidword(false, tidw.latest, tidw.absent, tidw.prio_ver + 1, 0, 0,
+                   new_data_ver, epoch);
 }
 
 void TxExecutor::removeReserveAll() {

@@ -75,12 +75,6 @@ target_link_libraries(sbomb_polaris.exe
         Threads::Threads
 )
 
-if (DEFINED ADD_ANALYSIS)
-    add_definitions(-DADD_ANALYSIS=${ADD_ANALYSIS})
-else ()
-    add_definitions(-DADD_ANALYSIS=0)
-endif ()
-
 if (DEFINED BACK_OFF)
     add_definitions(-DBACK_OFF=${BACK_OFF})
 else ()

@@ -77,8 +77,8 @@ void siloLeaderWork(uint64_t& epoch_timer_start, uint64_t& epoch_timer_stop) {
 
 void ShowOptParameters() {
     cout << "#ShowOptParameters()"
-         << ": ADD_ANALYSIS " << ADD_ANALYSIS << ": BACK_OFF " << BACK_OFF
-         << ": KEY_SIZE " << KEY_SIZE << ": MASSTREE_USE " << MASSTREE_USE
+         << ": BACK_OFF " << BACK_OFF << ": KEY_SIZE " << KEY_SIZE
+         << ": MASSTREE_USE " << MASSTREE_USE
          << ": NO_WAIT_LOCKING_IN_VALIDATION " << NO_WAIT_LOCKING_IN_VALIDATION
          << ": PARTITION_TABLE " << PARTITION_TABLE << ": PROCEDURE_SORT "
          << PROCEDURE_SORT << ": SLEEP_READ_PHASE " << SLEEP_READ_PHASE

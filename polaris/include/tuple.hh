@@ -20,6 +20,21 @@ struct Tidword {
 
     Tidword() : obj_(0) {}
 
+    Tidword(const bool lock, const bool latest, const bool absent,
+            const uint32_t prio_ver, const uint32_t prio,
+            const uint32_t ref_cnt, const uint32_t data_ver,
+            const uint32_t epoch)
+        : obj_(0) {
+        this->lock = lock;
+        this->latest = latest;
+        this->absent = absent;
+        this->prio_ver = prio_ver;
+        this->prio = prio;
+        this->ref_cnt = ref_cnt;
+        this->data_ver = data_ver;
+        this->epoch = epoch;
+    }
+
     bool operator==(const Tidword& right) const { return obj_ == right.obj_; }
 
     bool operator!=(const Tidword& right) const { return !operator==(right); }
